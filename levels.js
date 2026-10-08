@@ -9,7 +9,7 @@
     .   empty space
     H   ladder (the top ladder tile in a column is something you can stand on)
     P   player start (feet stand on the tile below)
-    E   exit door (the bottom tile of the door; the door is 2 tiles tall)
+    E   exit door (the bottom tile of the door; the door is 2 tiles tall). Press E at the door to leave.
     $   painting — you must take every painting before the exit unlocks
     *   bonus gem — optional and tracked on its own (shown as ◆ next to the stars)
 
@@ -21,11 +21,12 @@
     drone    { path: [[x,y], [x,y], ...], speed, fov, range }
     laser    { x1, y1, x2, y2, on, off, offset, id }  on/off in seconds = pulsing
     valuable { x, y }   optional loot (cash, watches, jewellery) — take them all for the third star
+  JUMPING: the thief jumps about 1.5 tiles, so crates should be 1 tile tall, and loot no higher
+  than 2 rows above the floor the thief stands on.
     panel    { x, y, targets: [ids], duration }   hold E to hack.
              Lasers it targets switch off for good; cameras loop for `duration` seconds.
 
   OTHER LEVEL SETTINGS
-    heat: true      being seen fills the HEAT bar instead of ending the job instantly
     shadows: [{ x, y, w, h }]   dark areas — stand fully inside one to be hidden
     reinforce: [{ heat: 66, objects: [...] }]   spawned when heat passes that value
 */
@@ -45,12 +46,12 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'First Job',
     act: 0,
-    hint: 'A / D to move · W or Space to jump · take the painting, then reach the door',
+    hint: 'A / D to move · W or Space to jump · take the painting, then press E at the door',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL,
       ROOM,
       '#...........$.........*......#',
-      '#..........###.......###.....#',
+      ROOM,
       '#..P.......###.......###..E..#',
       WALL,
     ],
@@ -64,8 +65,8 @@ window.NIGHT_SHIFT_LEVELS = [
     hint: 'Hold S to duck under low gaps and crawl through vents · jump to reach high things',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL,
-      '#.........#....*......###....#',
       '#.........#...........###....#',
+      '#.........#....*......###....#',
       '#.........#...........###....#',
       '#.P...................$...E..#',
       WALL,
@@ -77,7 +78,7 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Lights Out',
     act: 0,
-    hint: 'Light means you are seen · the dark strip under the display hides you, but only if you duck',
+    hint: 'Being seen fills the HEAT bar · the dark strip under the display hides you, but only if you duck',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL,
       ROOM,
@@ -101,7 +102,7 @@ window.NIGHT_SHIFT_LEVELS = [
       ROOM,
       '#.................*..........#',
       ROOM,
-      '#.................##.........#',
+      ROOM,
       '#.............$...##.........#',
       '#####H#################H######',
       '#....H.................H.....#',
@@ -142,7 +143,7 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Night Watchman',
     act: 1,
-    hint: 'Guards look the way they walk · duck in the dark and he will walk straight past you',
+    hint: 'Guards see where their torch points · duck in the dark and he will walk straight past you',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL,
       ROOM,
@@ -174,7 +175,7 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
       ROOM,
       '#.............*..............#',
-      '#............###.............#',
+      ROOM,
       '#.P..........###.............#',
       '##########################H###',
       '#.........................H..#',
@@ -235,13 +236,12 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Turning Up the Heat',
     act: 1,
-    heat: true,
-    hint: 'From now on, being seen fills the HEAT bar · it cools down when you stay hidden · fill it and you are caught',
+    hint: 'Heat over a third puts security on ALERT, over two thirds is LOCKDOWN · it cools when you stay hidden',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL,
       ROOM,
       '#...................$........#',
-      '#...........##.....###.......#',
+      ROOM,
       '#.P.........##.....###..*..E.#',
       WALL,
     ],
@@ -262,13 +262,12 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'The Collection',
     act: 1,
-    heat: true,
     hint: 'Three paintings on three floors · the door stays locked until you have all of them',
     map: [
       WALL,
       ROOM,
       '#.....................*......#',
-      '#...............$.....##.....#',
+      '#...............$............#',
       '#.....................##...E.#',
       '####H#########################',
       '#...H........................#',
@@ -304,7 +303,6 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Tripwire',
     act: 2,
-    heat: true,
     hint: 'Lasers set off the alarm · duck under high beams, jump over low ones, go round the rest',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL,
@@ -323,20 +321,19 @@ window.NIGHT_SHIFT_LEVELS = [
     objects: [
       { type: 'valuable', x: 8, y: 10 }, { type: 'valuable', x: 11, y: 15 },
       { type: 'laser', x1: 7, y1: 14.6, x2: 10, y2: 14.6 },
-      { type: 'laser', x1: 12.4, y1: 15.55, x2: 13.6, y2: 15.55 },
+      { type: 'laser', x1: 12.8, y1: 15.8, x2: 13.2, y2: 15.8 },
       { type: 'laser', x1: 18.5, y1: 12, x2: 18.5, y2: 16 },
     ],
   },
   {
     name: 'Pulse',
     act: 2,
-    heat: true,
     hint: 'These beams switch on and off · watch the rhythm, then go',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL,
       ROOM,
       '#......................*.....#',
-      '#.....................###....#',
+      ROOM,
       '#.P............$......###..E.#',
       WALL,
     ],
@@ -352,7 +349,6 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Backdoor',
     act: 2,
-    heat: true,
     shadows: [
       { x: 16, y: 6, w: 2, h: 5 },
       { x: 22, y: 6, w: 2, h: 5 },
@@ -386,7 +382,6 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Blind Spot',
     act: 2,
-    heat: true,
     shadows: [
       { x: 22, y: 12, w: 2, h: 4 },
       { x: 26, y: 12, w: 1, h: 4 },
@@ -410,7 +405,6 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'The Vault',
     act: 2,
-    heat: true,
     hint: 'Everything at once · the vault panel is upstairs',
     map: [
       WALL,
@@ -425,8 +419,8 @@ window.NIGHT_SHIFT_LEVELS = [
       '#...........$.............H..#',
       '#.........................H..#',
       '###H##########################',
-      '#..H.........*...............#',
       '#..H.........................#',
+      '#..H.........*...............#',
       '#..H.........................#',
       '#..H.........$.............E.#',
       WALL,
@@ -453,7 +447,6 @@ window.NIGHT_SHIFT_LEVELS = [
   {
     name: 'Hover',
     act: 3,
-    heat: true,
     hint: 'Drones fly over walls and floors · stay under cover · if the heat gets high, more arrive',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL,

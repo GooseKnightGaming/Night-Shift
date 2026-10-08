@@ -551,10 +551,12 @@ window.NightShiftRender = (() => {
       torso.add(a.top);
       return a;
     });
-    if (guard) { // torch in the right hand
-      const torch = mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.2, 10), M.dark, 0, -0.3, 0.07, arms[1].mid);
-      torch.rotation.x = Math.PI / 2;
-      mesh(new THREE.CircleGeometry(0.03, 10), basic(0xfff3c8), 0, 0.101, 0, torch).rotation.x = -Math.PI / 2;
+    if (guard) { // torch held out in the right hand; his vision cone starts here
+      const torch = mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.24, 12), M.dark, 0, -0.34, 0, arms[1].mid);
+      const lens = mesh(new THREE.CircleGeometry(0.038, 12), basic(0xfff3c8), 0, -0.121, 0, torch);
+      lens.rotation.x = Math.PI / 2; lens.castShadow = false;
+      const flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xfff0c0, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9 }));
+      flare.scale.set(0.45, 0.45, 1); flare.position.y = -0.14; torch.add(flare);
     }
     const legs = [-1, 1].map((s) => {
       const l = limb(-0.04, s * 0.09, 0.42, 0.4, 0.075, 0.06, M.legs, M.legs, (mid, y) => {
@@ -597,8 +599,8 @@ window.NightShiftRender = (() => {
     } else if (s.speed < 0.05) {
       const br = Math.sin(s.phase * 0.4 + performance.now() / 700) * 0.015;
       lean = 0.03 + br; armA = [0.05, -0.05];
-      if (s.alertPose) { armA = [-0.3, -1.2]; elbowA = [-0.4, -1.0]; }
     }
+    if (s.torch && !s.climb) { armA[1] = -1.25; elbowA[1] = -0.1; }   // torch arm points the beam forward
     hm.hips.position.y = lerp(hm.hips.position.y, hipY, k);
     hm.torso.rotation.x = lerp(hm.torso.rotation.x, lean, k);
     hm.head.rotation.x = lerp(hm.head.rotation.x, headX, k);
@@ -683,11 +685,44 @@ window.NightShiftRender = (() => {
     geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
   }
 
+  // ───────────── decoys ─────────────
+  function buildDecoy() {
+    const g = new THREE.Group(); world.add(g);
+    mesh(new THREE.BoxGeometry(0.22, 0.16, 0.16), std(0xc9c2b0, { r: 0.4, m: 0.3 }), 0, 0.08, 0, g);
+    mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 14), std(0xf4f0e6, { r: 0.3 }), 0, 0.09, 0.085, g).rotation.x = Math.PI / 2;
+    for (const s of [-0.07, 0.07]) mesh(new THREE.SphereGeometry(0.035, 8, 6), std(0xb08a3a, { r: 0.3, m: 0.8 }), s, 0.19, 0, g);
+    const ledMat = basic(0xff4040);
+    mesh(new THREE.SphereGeometry(0.022, 6, 4), ledMat, 0.08, 0.13, 0.085, g).castShadow = false;
+    const ringMat = basic(0xffd479, { transparent: true, opacity: 0.6, add: true, depthWrite: false, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.015, 6, 32), ringMat);
+    ring.position.y = 0.1; g.add(ring);
+    return { g, ledMat, ring, ringMat };
+  }
+  function updateDecoys(L, t) {
+    if (!B.decoys) B.decoys = new Map();
+    const live = new Set(L.decoys || []);
+    for (const [d, n] of B.decoys) if (!live.has(d)) { world.remove(n.g); B.decoys.delete(d); }
+    for (const d of L.decoys || []) {
+      let n = B.decoys.get(d);
+      if (!n) { n = buildDecoy(); B.decoys.set(d, n); }
+      const f = d.fly;
+      const x = wx(d.fromX + (d.x - d.fromX) * f);
+      const y0 = wy(d.fromY), y1 = wy(d.feet);
+      const y = y0 + (y1 - y0) * f + Math.sin(f * Math.PI) * 0.9;
+      n.g.position.set(x, y, 0.1);
+      n.g.rotation.z = d.landed ? 0 : f * 9;
+      const on = d.landed && d.t > 0;
+      n.ring.visible = on;
+      if (on) { const k = (t * 1.6) % 1; n.ring.scale.setScalar(0.5 + k * 3); n.ringMat.opacity = 0.6 * (1 - k); }
+      n.ledMat.color.setHex(on && Math.sin(t * 12) > 0 ? 0xff4040 : 0x501010);
+    }
+  }
+
   // ───────────── per-frame sync ─────────────
   function frame(L, ctx) {
     if (!B || B.L !== L) return;
     const t = ctx.clock, dt = Math.max(0.001, Math.min(0.05, ctx.dt));
-    const menu = ctx.mode === 'title' || ctx.mode === 'select';
+    const menu = ctx.mode === 'title' || ctx.mode === 'select' || ctx.mode === 'shop';
 
     // player
     const p = L.player;
@@ -706,7 +741,7 @@ window.NightShiftRender = (() => {
       if (o.kind === 'guard') {
         n.root.position.set(wx(o.x), wy(o.feet), 0.05);
         const walking = o.wait <= 0;
-        pose(n, { phase: o.step * 2.2, speed: walking ? 0.75 : 0, facing: o.dir, dt, alertPose: o.seeing });
+        pose(n, { phase: o.step * 2.2, speed: walking ? 0.75 : 0, facing: o.dir, dt, torch: true });
       } else if (o.kind === 'camera' || o.kind === 'sentry') {
         n.head.rotation.z = -o.angle;
         const off = o.off > 0;
@@ -746,6 +781,7 @@ window.NightShiftRender = (() => {
     const dc = open ? 0x40ff8a : 0xff4040;
     B.door.signMat.color.setHex(dc); B.door.glow.material.color.setHex(dc);
 
+    updateDecoys(L, t);
     updateCones(ctx);
     updateParticles(L);
 

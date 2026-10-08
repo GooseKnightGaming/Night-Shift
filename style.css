@@ -203,3 +203,22 @@ button.primary:hover { background: #ffd58a; }
   .tagline { margin-bottom: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+
+/* V3: bank, Safehouse */
+.bank-line { margin: 14px 0 0; font: 600 12px/1 var(--font-mono); color: var(--muted); letter-spacing: 0.04em; }
+.bank-line b { color: var(--amber); font-weight: 600; }
+.head-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.head-right .bank-line { margin: 0; }
+.shop .card { width: min(860px, 100%); }
+.shop-note { margin: 0 0 14px; color: var(--muted); font-size: 15px; }
+.shop-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.shop-item { border: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.shop-item header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.shop-item h3 { font: 600 18px/1.1 var(--font-ui); }
+.shop-item p { margin: 0; color: var(--muted); font-size: 14px; }
+.shop-item .status { color: var(--text); font-size: 13px; flex: 1; }
+.shop-item button { align-self: flex-start; }
+.shop-item button:disabled { opacity: 0.45; cursor: not-allowed; }
+.pips { display: flex; gap: 4px; }
+.pips i { width: 10px; height: 10px; border: 1px solid #5a5670; display: block; }
+.pips i.on { background: var(--amber); border-color: var(--amber); }

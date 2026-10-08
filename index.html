@@ -18,18 +18,21 @@
 
   <section class="screen title dim" id="screen-title">
     <div class="card">
-      <div class="eyebrow">GooseKnightGaming presents · <span id="version">V2</span></div>
+      <div class="eyebrow">GooseKnightGaming presents · <span id="version">V3</span></div>
       <h1>NIGHT<br><span>SHIFT</span></h1>
       <p class="tagline">Get in. Take the painting. Get out without being seen.</p>
       <div class="actions">
         <button type="button" class="primary" id="btn-play">Start the job</button>
         <button type="button" id="btn-levels">Choose level</button>
+        <button type="button" id="btn-shop">Safehouse</button>
       </div>
+      <p class="bank-line">Bank <b id="title-bank">£0k</b></p>
       <dl class="keys">
         <dt>A D</dt><dd>Move</dd>
         <dt>W / Space</dt><dd>Jump · W and S climb ladders</dd>
         <dt>S</dt><dd>Duck and crawl</dd>
-        <dt>E</dt><dd>Hack a panel (hold)</dd>
+        <dt>E</dt><dd>Hack a panel (hold) · leave by the door</dd>
+        <dt>Q</dt><dd>Throw a decoy</dd>
         <dt>R · Esc</dt><dd>Restart · pause</dd>
       </dl>
     </div>
@@ -39,7 +42,11 @@
     <div class="card">
       <div class="select-head">
         <h2>Jobs</h2>
-        <button type="button" id="btn-select-back">Back</button>
+        <div class="head-right">
+          <span class="bank-line">Bank <b id="select-bank">£0k</b></span>
+          <button type="button" id="btn-select-shop">Safehouse</button>
+          <button type="button" id="btn-select-back">Back</button>
+        </div>
       </div>
       <div id="acts"></div>
     </div>
@@ -73,19 +80,33 @@
       <h2 id="won-title">Clean getaway</h2>
       <ul class="stars-list" id="won-stars"></ul>
       <p class="haul" id="won-haul"></p>
-      <div class="meta"><span>Time <b id="won-time">0:00.0</b></span></div>
+      <div class="meta"><span>Time <b id="won-time">0:00.0</b></span><span>Fenced <b id="won-earned">£0k</b></span><span>Bank <b id="won-bank">£0k</b></span></div>
       <div class="actions">
         <button type="button" class="primary" id="won-next">Next job</button>
         <button type="button" id="btn-won-retry">Replay</button>
         <button type="button" id="btn-won-levels">Levels</button>
+        <button type="button" id="btn-won-shop">Safehouse</button>
       </div>
+    </div>
+  </section>
+  <section class="screen shop dim" id="screen-shop" hidden>
+    <div class="card">
+      <div class="select-head">
+        <h2>Safehouse</h2>
+        <div class="head-right">
+          <span class="bank-line">Bank <b id="shop-bank">£0k</b></span>
+          <button type="button" id="btn-shop-back">Back</button>
+        </div>
+      </div>
+      <p class="shop-note">Every painting, valuable and gem pays out the first time you escape with it.</p>
+      <div id="shop-items" class="shop-items"></div>
     </div>
   </section>
 </main>
 
 <p class="footer">
   <span class="touch-note">Night Shift is played with a keyboard.</span>
-  <kbd>A</kbd> <kbd>D</kbd> move · <kbd>W</kbd>/<kbd>Space</kbd> jump · <kbd>S</kbd> duck · <kbd>E</kbd> hack · <kbd>R</kbd> restart · <kbd>Esc</kbd> pause
+  <kbd>A</kbd> <kbd>D</kbd> move · <kbd>W</kbd>/<kbd>Space</kbd> jump · <kbd>S</kbd> duck · <kbd>E</kbd> hack / exit · <kbd>Q</kbd> decoy · <kbd>R</kbd> restart · <kbd>Esc</kbd> pause
 </p>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>

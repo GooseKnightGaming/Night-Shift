@@ -19,7 +19,7 @@
   'use strict';
 
   // ───────────────────────── 1. Constants and setup ─────────────────────────
-  const VERSION = 'V2';
+  const VERSION = 'V3';
   const T = 32, COLS = 30, ROWS = 17;
   const W = COLS * T, H = ROWS * T;
   const LEVELS = window.NIGHT_SHIFT_LEVELS || [];
@@ -27,29 +27,31 @@
 
   const P_W = 20, P_HS = 54, P_HD = 28;          // player width, standing height, ducking height
   const WALK = 175, DUCK_WALK = 100, CLIMB = 135;  // pixels per second
-  const GRAV = 3000, FALL_GRAV = 3700, JUMP_V = 690, MAX_FALL = 1100;   // V2: heavier, snappier jump
-  const HACK_TIME = 1.2;
-
+  const GRAV = 2600, FALL_GRAV = 3200, JUMP_V = 500, MAX_FALL = 1100;   // V3: jump is about 1.5 tiles
   // How fast each kind of security fills the heat bar (per second while it sees you)
   const RATES = { camera: 45, guard: 70, drone: 55, sentry: 140 };
-  const INSTANT_MULT = 6;   // before heat is introduced, detection is near-instant
+
+  // Money. Every item pays out once, the first time you escape with it.
+  const VAL_VALUES = { cash: 150000, watch: 250000, jewels: 400000 };
+  const GEM_VALUE = 1000000;
+  const DECOY_PRICE = 750000, DECOY_MAX = 3, DECOY_LIFE = 6;
+  const UPGRADES = [
+    { id: 'hack', name: 'Quick Fingers', desc: 'Hack panels faster.', prices: [2000000, 5000000], tiers: ['Hacking takes 0.8s', 'Hacking takes 0.5s'] },
+    { id: 'loop', name: 'Loop Extender', desc: 'Looped cameras stay blind for longer.', prices: [3000000, 6000000], tiers: ['+3s on every camera loop', '+6s on every camera loop'] },
+    { id: 'cool', name: 'Cool Head', desc: 'Heat starts cooling sooner, and faster.', prices: [2500000, 6000000], tiers: ['Cools after 1s, 60% faster', 'Cools after 0.6s, twice as fast'] },
+    { id: 'dark', name: 'Dark Clothing', desc: 'Harder to pick out in the light.', prices: [8000000], tiers: ['Heat builds 20% slower'] },
+  ];
+  const fmtMoney = (n) => (n >= 1e6 ? `£${(n / 1e6).toFixed(n >= 1e7 ? 1 : 2).replace(/\.?0+$/, '')}m` : `£${Math.round(n / 1000)}k`);
 
   const FONT_DISPLAY = '"Saira Stencil One", Impact, "Arial Narrow", sans-serif';
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
   const FONT_UI = '"Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif';
 
-  const ACT_STYLE = [
-    { wall: '#2a2134', stripe: '#2f2639', trim: '#8a6f4a', mass: '#100d16', edge: '#4a3b55' }, // gallery: plum
-    { wall: '#1e2a27', stripe: '#22302c', trim: '#6f7f63', mass: '#0b1110', edge: '#3a4b45' }, // museum: green slate
-    { wall: '#1c2333', stripe: '#212939', trim: '#5f7290', mass: '#0b0e16', edge: '#36425a' }, // bank: steel
-    { wall: '#16242a', stripe: '#1a2a31', trim: '#4f8a8c', mass: '#081114', edge: '#2d4a52' }, // tower: teal glass
-  ];
-
   const PAINTINGS = [
-    ['Harbour at Dusk', '£1.2m'], ['Woman with a Lantern', '£3.4m'], ['Study in Blue', '£860k'],
-    ['The Coal Barge', '£2.1m'], ['Still Life with Pears', '£640k'], ['Mersey Fog', '£1.7m'],
-    ['Portrait of a Clerk', '£920k'], ['The Last Tram', '£2.8m'], ['Orchard in Rain', '£1.1m'],
-    ['Saint in Red', '£4.0m'], ['Two Swimmers', '£1.5m'], ['The Night Ferry', '£2.3m'],
+    ['Harbour at Dusk', 1200000], ['Woman with a Lantern', 3400000], ['Study in Blue', 860000],
+    ['The Coal Barge', 2100000], ['Still Life with Pears', 640000], ['Mersey Fog', 1700000],
+    ['Portrait of a Clerk', 920000], ['The Last Tram', 2800000], ['Orchard in Rain', 1100000],
+    ['Saint in Red', 4000000], ['Two Swimmers', 1500000], ['The Night Ferry', 2300000],
   ];
   const PAINT_HUES = [18, 205, 42, 160, 330, 260, 95, 10, 190, 280];
 
@@ -81,6 +83,7 @@
     interact: ['KeyE'],
     restart: ['KeyR'],
     pause: ['Escape', 'KeyP'],
+    decoy: ['KeyQ'],
   };
   const GAME_KEYS = new Set(Object.values(BINDINGS).flat());
   const Input = {
@@ -101,11 +104,17 @@
 
   // ───────────────────────── 3. Save data ─────────────────────────
   const SAVE_KEY = 'nightshift.v1';
-  let save = { unlocked: 1, best: {} };
+  let save = { unlocked: 1, best: {}, bank: 0, taken: [], upgrades: {}, decoys: 0 };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s === 'object') save = { unlocked: s.unlocked || 1, best: s.best || {} };
+    if (s && typeof s === 'object') save = { ...save, ...s, upgrades: { ...(s.upgrades || {}) }, taken: s.taken || [] };
   } catch (e) { /* storage unavailable: progress lasts for this visit only */ }
+  const tier = (id) => save.upgrades[id] || 0;
+  const hackTime = () => [1.2, 0.8, 0.5][tier('hack')];
+  const loopBonus = () => [0, 3, 6][tier('loop')];
+  const coolDelay = () => [1.5, 1.0, 0.6][tier('cool')];
+  const coolRate = () => [7, 11, 14][tier('cool')];
+  const heatGain = () => (tier('dark') ? 0.8 : 1);
   if (location.hash === '#all') save.unlocked = LEVELS.length;   // testing shortcut: add #all to the URL
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
 
@@ -132,18 +141,19 @@
           loot.push({ kind: 'art', x, y, got: false, title: p[0], value: p[1], hue: PAINT_HUES[(index + artCount * 3) % PAINT_HUES.length] });
           artCount++;
         }
-        if (ch === '*') loot.push({ kind: 'gem', x, y, got: false });
+        if (ch === '*') loot.push({ kind: 'gem', x, y, got: false, value: GEM_VALUE });
       }
     }
     const VAL_KINDS = [['cash', 'a bundle of cash'], ['watch', 'a gold watch'], ['jewels', 'a jewellery box']];
     (def.objects || []).filter((o) => o.type === 'valuable').forEach((o, k) => {
       const v = VAL_KINDS[(index + k) % VAL_KINDS.length];
-      loot.push({ kind: 'val', x: o.x, y: o.y, got: false, variant: v[0], label: v[1] });
+      loot.push({ kind: 'val', x: o.x, y: o.y, got: false, variant: v[0], label: v[1], value: VAL_VALUES[v[0]] });
     });
+    loot.forEach((it) => { it.id = `${index}:${it.kind}:${it.x},${it.y}`; it.banked = save.taken.includes(it.id); });
     L = {
-      index, def, grid, loot, exit,
+      index, def, grid, loot, exit, decoys: [],
       act: def.act || 0,
-      heatMode: !!def.heat,
+      heatMode: true,
       shadows: (def.shadows || []).map((s) => ({ x: s.x * T, y: s.y * T, w: s.w * T, h: s.h * T })),
       objects: [],
       reinforce: (def.reinforce || []).map((r) => ({ heat: r.heat, objects: r.objects, done: false })),
@@ -377,7 +387,20 @@
         o.t += dt * speedUp;
         o.angle = o.base + (o.sweep ? o.sweep * Math.sin((2 * Math.PI * o.t) / o.period + o.phase) : 0);
       } else if (o.kind === 'guard') {
-        if (o.wait > 0) {
+        const lure = (L.decoys || []).find((d) => d.landed && d.t > 0 && Math.abs(d.feet - o.feet) < 6 && Math.abs(d.x - o.x) < 9 * T);
+        if (lure) {
+          // a decoy on this floor: walk over to it and stare at it until it stops
+          o.lured = true;
+          const dx = lure.x - o.x;
+          if (Math.abs(dx) > 18) { o.dir = Math.sign(dx); o.x += o.dir * o.speed * 1.2 * dt; o.step += o.speed * dt * 0.07; o.wait = 0; }
+          else { o.dir = Math.sign(dx) || o.dir; o.wait = 0.01; }
+        } else if (o.lured || o.x < o.from - 1 || o.x > o.to + 1) {
+          // decoy finished: walk back to the patrol route
+          const target = clamp(o.x, o.from, o.to);
+          const dx = target - o.x;
+          if (Math.abs(dx) > 2) { o.dir = Math.sign(dx); o.x += o.dir * o.speed * dt; o.step += o.speed * dt * 0.06; o.wait = 0; }
+          else { o.lured = false; o.wait = 0; }
+        } else if (o.wait > 0) {
           o.wait -= dt;
           if (o.wait <= 0) o.dir *= -1;
         } else {
@@ -409,10 +432,11 @@
       if ((o.kind === 'camera' || o.kind === 'sentry') && o.off <= 0) {
         cones.push({ src: o, kind: o.kind, ox: o.x, oy: o.y + 5, angle: o.angle, fov: o.fov, range: o.range });
       } else if (o.kind === 'guard') {
-        const face = o.wait > 0 ? o.dir : o.dir;
+        // the guard's eyes follow his torch: the beam starts at the torch in his hand
+        const face = o.dir;
         cones.push({
-          src: o, kind: 'guard', ox: o.x + face * 6, oy: o.feet - 46,
-          angle: face > 0 ? rad(10) : Math.PI - rad(10), fov: rad(52), range: (7 + alert * 1.5) * T,
+          src: o, kind: 'guard', ox: o.x + face * 15, oy: o.feet - 38,
+          angle: face > 0 ? rad(12) : Math.PI - rad(12), fov: rad(46), range: (7 + alert * 1.5) * T,
         });
       } else if (o.kind === 'drone') {
         cones.push({ src: o, kind: 'drone', ox: o.x, oy: o.y + 8, angle: Math.PI / 2, fov: o.fov, range: o.range + alert * T });
@@ -439,20 +463,18 @@
 
     L.seenNow = rate > 0;
     if (rate > 0) {
-      L.heat += rate * (L.heatMode ? 1 : INSTANT_MULT) * dt;
+      L.heat += rate * heatGain() * dt;
       L.everSeen = true; L.unseen = 0; L.cause = cause;
     } else {
       L.unseen += dt;
-      const delay = L.heatMode ? 1.5 : 0.15, decay = L.heatMode ? 7 : 160;
-      if (L.unseen > delay) L.heat -= decay * dt;
+      if (L.unseen > coolDelay()) L.heat -= coolRate() * dt;
     }
 
     // Lasers
     if (L.laserCooldown > 0) L.laserCooldown -= dt;
     for (const o of L.objects) {
-      if (o.kind === 'laser' && o.live && L.laserCooldown <= 0 && segHitsRect(o.x1, o.y1, o.x2, o.y2, p)) {
+      if (o.kind === 'laser' && o.live && L.laserCooldown <= 0 && segHitsRect(o.x1, o.y1, o.x2, o.y2, { x: p.x + 2, y: p.y + 1, w: p.w - 4, h: p.h - 1 })) {
         L.everSeen = true; L.cause = 'laser'; L.flash = 0.35;
-        if (!L.heatMode) { L.heat = 100; break; }
         L.heat += 40; L.laserCooldown = 0.9; L.shake = 0.25;
         showToast('Tripwire! Heat +40');
       }
@@ -490,17 +512,17 @@
       if (o.used && permanent) { L.prompt = 'Panel already hacked'; continue; }
       if (o.cooldown > 0) { L.prompt = `Panel rebooting… ${Math.ceil(o.cooldown)}`; continue; }
       if (Input.down('interact')) {
-        o.progress += dt / HACK_TIME;
+        o.progress += dt / hackTime();
         L.prompt = 'Hacking…';
         if (o.progress >= 1) {
           o.progress = 0; o.used = true;
           for (const t of L.objects) {
             if (!o.targets.includes(t.id)) continue;
             if (t.kind === 'laser') t.disabled = true;
-            if (t.kind === 'camera' || t.kind === 'sentry') t.off = o.duration;
+            if (t.kind === 'camera' || t.kind === 'sentry') t.off = o.duration + loopBonus();
           }
-          o.cooldown = permanent ? 0 : o.duration + 2;
-          showToast(permanent ? 'Lasers offline' : `Camera looped for ${o.duration} seconds`);
+          o.cooldown = permanent ? 0 : o.duration + loopBonus() + 2;
+          showToast(permanent ? 'Lasers offline' : `Camera looped for ${o.duration + loopBonus()} seconds`);
           burst(o.x + T / 2, o.y + 10, '#7cf2c4', 14);
         }
       } else {
@@ -519,13 +541,13 @@
       if (overlap(p, r)) {
         it.got = true;
         if (it.kind === 'art') {
-          showToast(`Lifted “${it.title}” (${it.value})`);
+          showToast(`Lifted “${it.title}” (${fmtMoney(it.value)})`);
           burst(it.x * T + T / 2, it.y * T + T / 2, '#f2c46d', 18);
         } else if (it.kind === 'val') {
-          showToast(`Pocketed ${it.label}`);
+          showToast(`Pocketed ${it.label} (${fmtMoney(it.value)})`);
           burst(it.x * T + T / 2, it.y * T + T / 2, '#ffe9a8', 10);
         } else {
-          showToast('Bonus gem!');
+          showToast(`Bonus gem! (${fmtMoney(it.value)})`);
           burst(it.x * T + T / 2, it.y * T + T / 2, '#8fe9ff', 16);
         }
       }
@@ -533,9 +555,34 @@
     const door = { x: L.exit.x * T + 6, y: (L.exit.y - 1) * T + 4, w: T - 12, h: 2 * T - 4 };
     if (overlap(p, door)) {
       const left = L.loot.filter((i) => i.kind === 'art' && !i.got).length;
-      if (left === 0) win();
+      if (left === 0) { L.prompt = 'Press E to slip out'; if (Input.hit('interact')) win(); }
       else L.prompt = left === 1 ? 'Locked · take the painting first' : `Locked · ${left} paintings still on the walls`;
     }
+  }
+
+  // Decoys: a ticking noisemaker. Guards on the same floor walk over to it and stare at it.
+  function throwDecoy() {
+    if (save.decoys <= 0) { showToast('No decoys · buy them at the Safehouse'); return; }
+    const p = L.player;
+    const sx = p.x + p.w / 2, sy = p.y + p.h - 6;
+    let x = sx;
+    for (let k = 0; k < 24; k++) {           // fly forward up to 3 tiles, stop at walls
+      const nx = x + p.facing * 4;
+      if (solid(Math.floor(nx / T), Math.floor(sy / T)) || solid(Math.floor(nx / T), Math.floor((sy - 20) / T))) break;
+      x = nx;
+    }
+    let row = Math.floor(sy / T);
+    while (row < ROWS - 1 && !solid(Math.floor(x / T), row + 1) && !ladderTop(Math.floor(x / T), row + 1)) row++;
+    save.decoys--; persist();
+    L.decoys.push({ x, feet: (row + 1) * T, fromX: sx, fromY: p.y + 20, t: DECOY_LIFE, fly: 0, landed: false });
+    showToast(`Decoy thrown · ${save.decoys} left`);
+  }
+  function updateDecoys(dt) {
+    for (const d of L.decoys) {
+      if (!d.landed) { d.fly += dt / 0.45; if (d.fly >= 1) { d.fly = 1; d.landed = true; } }
+      else d.t -= dt;
+    }
+    L.decoys = L.decoys.filter((d) => !d.landed || d.t > -0.5);
   }
 
   function showToast(text) { L.toast = { text, t: 2.4 }; }
@@ -557,6 +604,8 @@
     if (mode !== 'play') { updateObjects(dt); return; }
     if (Input.hit('restart')) { startLevel(L.index); return; }
     if (Input.hit('pause')) { pause(); return; }
+    if (Input.hit('decoy')) throwDecoy();
+    updateDecoys(dt);
 
     updatePlayer(dt);
     updateObjects(dt);
@@ -593,12 +642,12 @@
     // heat / detection meter
     const bx = W / 2 - 110, bw = 220;
     ctx.font = `600 10px ${FONT_MONO}`; ctx.fillStyle = '#9c96b3'; ctx.textAlign = 'right';
-    ctx.fillText(L.heatMode ? 'HEAT' : 'SEEN', bx - 8, 13);
+    ctx.fillText('HEAT', bx - 8, 13);
     ctx.fillStyle = '#1b1a26'; ctx.fillRect(bx, 8, bw, 10);
     if (L.heatMode) { ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(bx + bw * 0.33, 6, 1, 14); ctx.fillRect(bx + bw * 0.66, 6, 1, 14); }
     ctx.fillStyle = L.heat >= 66 ? '#ff4d43' : L.heat >= 33 ? '#ffae3d' : '#f2d46d';
     ctx.fillRect(bx, 8, (bw * L.heat) / 100, 10);
-    const tier = L.heatMode ? (L.heat >= 66 ? 'LOCKDOWN' : L.heat >= 33 ? 'ALERT' : 'QUIET') : L.seenNow ? 'SPOTTED' : 'UNSEEN';
+    const tier = L.seenNow ? 'SPOTTED' : L.heat >= 66 ? 'LOCKDOWN' : L.heat >= 33 ? 'ALERT' : 'QUIET';
     ctx.textAlign = 'left'; ctx.fillStyle = L.seenNow ? '#ff6b61' : '#9c96b3';
     ctx.fillText(tier, bx + bw + 8, 13);
 
@@ -613,6 +662,14 @@
     if (v2) { ctx.fillStyle = '#ffe3a0'; ctx.fillText(`● ${v1}/${v2}`, rx, 13); rx -= 56; }
     const [a1, a2] = count('art');
     ctx.fillStyle = '#f2c46d'; ctx.fillText(`▣ ${a1}/${a2}`, rx, 13);
+
+    // haul so far and decoys, in a chip under the level name
+    const haul = L.loot.filter((i) => i.got).reduce((n, i) => n + i.value, 0);
+    const chip = `HAUL ${fmtMoney(haul)}   DECOYS ${save.decoys} [Q]`;
+    ctx.font = `600 10px ${FONT_MONO}`; ctx.textAlign = 'left';
+    const cw = ctx.measureText(chip).width + 16;
+    ctx.fillStyle = 'rgba(6,6,12,0.7)'; ctx.fillRect(8, 30, cw, 18);
+    ctx.fillStyle = '#cfc9dc'; ctx.fillText(chip, 16, 39.5);
 
     ctx.fillStyle = 'rgba(6,6,12,0.7)'; ctx.fillRect(0, H - 24, W, 24);
     ctx.font = `500 13px ${FONT_UI}`; ctx.fillStyle = '#b9b3cc'; ctx.textAlign = 'center';
@@ -661,11 +718,11 @@
     if (L.flash > 0 || mode === 'caught') {
       ctx.fillStyle = `rgba(255,40,40,${mode === 'caught' ? 0.18 : L.flash * 0.5})`; ctx.fillRect(0, 0, W, H);
     }
-    if (mode !== 'title' && mode !== 'select') drawHUD();
+    if (mode !== 'title' && mode !== 'select' && mode !== 'shop') drawHUD();
   }
 
   // ───────────────────────── 10. Menus and main loop ─────────────────────────
-  const screens = ['title', 'select', 'pause', 'caught', 'won'];
+  const screens = ['title', 'select', 'pause', 'caught', 'won', 'shop'];
   function show(name) { screens.forEach((s) => { $(`screen-${s}`).hidden = s !== name; }); }
 
   function startLevel(i) {
@@ -708,13 +765,20 @@
       time: prev?.time ? Math.min(prev.time, L.time) : L.time,
     };
     save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, L.index + 2));
+    // fence the haul: each item pays out the first time you escape with it
+    const fresh = L.loot.filter((i) => i.got && !save.taken.includes(i.id));
+    const earned = fresh.reduce((n, i) => n + i.value, 0);
+    fresh.forEach((i) => save.taken.push(i.id));
+    save.bank += earned;
     persist();
     $('won-title').textContent = !L.everSeen ? 'Clean getaway' : count >= 2 ? 'Got away' : 'Made it out';
     const labels = ['Escaped', 'Never spotted', allVals ? 'Took every valuable' : `Valuables ${vals.filter((v) => v.got).length} of ${vals.length}`];
     $('won-stars').innerHTML = stars.map((s, k) => `<li class="${s ? 'earned' : ''}"><span class="star" aria-hidden="true">★</span>${labels[k]}</li>`).join('') +
       (gems.length ? `<li class="gem ${gotGem ? 'earned' : ''}"><span class="star" aria-hidden="true">◆</span>${gotGem ? 'Bonus gem' : 'Bonus gem missed'}</li>` : '');
     const arts = L.loot.filter((i) => i.kind === 'art' && i.got);
-    $('won-haul').textContent = arts.map((a) => `“${a.title}” (${a.value})`).join(' · ');
+    $('won-haul').textContent = arts.map((a) => `“${a.title}” (${fmtMoney(a.value)})`).join(' · ');
+    $('won-earned').textContent = earned ? `+${fmtMoney(earned)}` : 'nothing new';
+    $('won-bank').textContent = fmtMoney(save.bank);
     $('won-time').textContent = fmtTime(L.time);
     $('won-next').hidden = L.index >= LEVELS.length - 1;
     burst(L.player.x + 10, L.player.y, '#4be08f', 20);
@@ -752,6 +816,7 @@
   function openSelect() {
     mode = 'select';
     buildSelect();
+    $('select-bank').textContent = fmtMoney(save.bank);
     show('select');
     if (!L) { loadLevel(9); }
   }
@@ -762,10 +827,58 @@
     const next = Math.min(save.unlocked, LEVELS.length) - 1;
     $('btn-play').textContent = Object.keys(save.best).length ? `Continue · ${pad2(next + 1)} ${LEVELS[next].name}` : 'Start the job';
     $('version').textContent = VERSION;
+    $('title-bank').textContent = fmtMoney(save.bank);
     show('title');
   }
 
+  // The Safehouse: spend the bank on upgrades and decoys
+  let shopReturn = 'title';
+  function openShop(from) {
+    shopReturn = from || 'title';
+    mode = 'shop';
+    buildShop();
+    show('shop');
+  }
+  function closeShop() { if (shopReturn === 'select') openSelect(); else openTitle(); }
+  function buildShop() {
+    $('shop-bank').textContent = fmtMoney(save.bank);
+    const root = $('shop-items');
+    root.innerHTML = '';
+    const card = (title, desc, status, pips, price, can, onBuy, label) => {
+      const el = document.createElement('article');
+      el.className = 'shop-item';
+      el.innerHTML = `<header><h3>${title}</h3><span class="pips">${pips}</span></header><p>${desc}</p><p class="status">${status}</p>`;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = can ? 'primary' : '';
+      b.disabled = !can && price !== null;
+      b.textContent = label || (price === null ? 'Owned' : `Buy · ${fmtMoney(price)}`);
+      if (price === null) b.disabled = true;
+      b.addEventListener('click', () => { onBuy(); persist(); buildShop(); });
+      el.appendChild(b);
+      root.appendChild(el);
+    };
+    UPGRADES.forEach((u) => {
+      const t = tier(u.id), max = u.prices.length;
+      const price = t < max ? u.prices[t] : null;
+      const pips = u.prices.map((_, k) => `<i class="${k < t ? 'on' : ''}"></i>`).join('');
+      const status = t ? `Now: ${u.tiers[t - 1]}` : (t < max ? `Next: ${u.tiers[t]}` : '');
+      const nextLine = t && t < max ? ` · Next: ${u.tiers[t]}` : '';
+      card(u.name, u.desc, status + nextLine, pips, price, price !== null && save.bank >= price, () => {
+        if (price === null || save.bank < price) return;
+        save.bank -= price; save.upgrades[u.id] = t + 1;
+      });
+    });
+    const full = save.decoys >= DECOY_MAX;
+    card('Decoy', 'A ticking noisemaker. Press Q to throw it. Guards on that floor walk over and stare at it for a few seconds.',
+      `Carrying ${save.decoys} of ${DECOY_MAX}`, '', full ? null : DECOY_PRICE, !full && save.bank >= DECOY_PRICE, () => {
+        if (full || save.bank < DECOY_PRICE) return;
+        save.bank -= DECOY_PRICE; save.decoys++;
+      }, full ? 'Pockets full' : null);
+  }
+
   function onMenuKey(e) {
+    if (mode === 'shop' && e.code === 'Escape') { closeShop(); return; }
     if (mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); $('btn-play').click(); }
     else if (mode === 'select' && e.code === 'Escape') openTitle();
     else if (mode === 'paused') {
@@ -791,6 +904,10 @@
   $('won-next').addEventListener('click', () => startLevel(L.index + 1));
   $('btn-won-retry').addEventListener('click', () => startLevel(L.index));
   $('btn-won-levels').addEventListener('click', openSelect);
+  $('btn-shop').addEventListener('click', () => openShop('title'));
+  $('btn-select-shop').addEventListener('click', () => openShop('select'));
+  $('btn-shop-back').addEventListener('click', closeShop);
+  $('btn-won-shop').addEventListener('click', () => openShop('select'));
 
   const STEP = 1 / 120;
   let last = performance.now(), acc = 0;
