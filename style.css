@@ -43,11 +43,22 @@ body {
   background: #000;
 }
 canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   outline: none;
-  image-rendering: auto;
+}
+.no-webgl {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  color: var(--text);
 }
 
 .screen {
@@ -149,6 +160,8 @@ button.primary:hover { background: #ffd58a; }
 .level .name { min-width: 0; line-height: 1.15; }
 .level .stars i { font-style: normal; color: #3a374c; font-size: 12px; }
 .level .stars i.on { color: var(--amber); }
+.level .stars i.gem { margin-left: 4px; }
+.level .stars i.gem.on { color: #8fe9ff; }
 .level:disabled { opacity: 0.4; cursor: not-allowed; }
 .level:disabled:hover { border-color: #33304a; }
 
@@ -164,6 +177,8 @@ button.primary:hover { background: #ffd58a; }
 .stars-list .star { color: #3a374c; font-size: 20px; line-height: 1; }
 .stars-list li.earned { color: var(--text); }
 .stars-list li.earned .star { color: var(--amber); }
+.stars-list li.gem { border-top: 1px solid var(--line); padding-top: 6px; }
+.stars-list li.gem.earned .star { color: #8fe9ff; }
 .meta { display: flex; gap: 14px; flex-wrap: wrap; font: 600 12px/1.5 var(--font-mono); color: var(--muted); margin-bottom: 16px; }
 .meta b { color: var(--text); font-weight: 600; }
 .haul { font-size: 14px; color: var(--amber); margin: 0 0 14px; }

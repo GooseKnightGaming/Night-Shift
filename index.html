@@ -12,11 +12,13 @@
 </head>
 <body>
 <main class="stage">
-  <canvas id="game" tabindex="0" aria-label="Night Shift game"></canvas>
+  <canvas id="view" aria-hidden="true"></canvas>
+  <canvas id="hud" tabindex="0" aria-label="Night Shift game"></canvas>
+  <p class="no-webgl" id="no-webgl" hidden>Night Shift needs WebGL to draw its 3D view. Try an up-to-date Chrome, Edge, Firefox or Safari.</p>
 
   <section class="screen title dim" id="screen-title">
     <div class="card">
-      <div class="eyebrow">GooseKnightGaming presents</div>
+      <div class="eyebrow">GooseKnightGaming presents · <span id="version">V2</span></div>
       <h1>NIGHT<br><span>SHIFT</span></h1>
       <p class="tagline">Get in. Take the painting. Get out without being seen.</p>
       <div class="actions">
@@ -86,7 +88,9 @@
   <kbd>A</kbd> <kbd>D</kbd> move · <kbd>W</kbd>/<kbd>Space</kbd> jump · <kbd>S</kbd> duck · <kbd>E</kbd> hack · <kbd>R</kbd> restart · <kbd>Esc</kbd> pause
 </p>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="levels.js"></script>
+<script src="render3d.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

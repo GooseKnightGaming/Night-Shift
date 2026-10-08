@@ -1,6 +1,7 @@
 /*
   NIGHT SHIFT — game engine
-  A small 2D stealth platformer. Plain JavaScript + one <canvas>, no libraries.
+  A 2.5D stealth platformer: the rules are 2D (side-on, tile-based), the picture is 3D.
+  This file is all the game logic plus the flat HUD. render3d.js draws the 3D scene with Three.js.
 
   Sections:
     1. Constants and setup
@@ -11,13 +12,14 @@
     6. Player movement
     7. Security: cameras, sentries, guards, drones, lasers, panels
     8. Heat, loot, exit
-    9. Drawing
+    9. HUD (the 3D scene lives in render3d.js)
    10. Menus and the main loop
 */
 (() => {
   'use strict';
 
   // ───────────────────────── 1. Constants and setup ─────────────────────────
+  const VERSION = 'V2';
   const T = 32, COLS = 30, ROWS = 17;
   const W = COLS * T, H = ROWS * T;
   const LEVELS = window.NIGHT_SHIFT_LEVELS || [];
@@ -25,7 +27,7 @@
 
   const P_W = 20, P_HS = 54, P_HD = 28;          // player width, standing height, ducking height
   const WALK = 175, DUCK_WALK = 100, CLIMB = 135;  // pixels per second
-  const GRAV = 1900, JUMP_V = 610, MAX_FALL = 950;
+  const GRAV = 3000, FALL_GRAV = 3700, JUMP_V = 690, MAX_FALL = 1100;   // V2: heavier, snappier jump
   const HACK_TIME = 1.2;
 
   // How fast each kind of security fills the heat bar (per second while it sees you)
@@ -51,7 +53,7 @@
   ];
   const PAINT_HUES = [18, 205, 42, 160, 330, 260, 95, 10, 190, 280];
 
-  const canvas = document.getElementById('game');
+  const canvas = document.getElementById('hud');   // flat HUD drawn over the 3D view
   const ctx = canvas.getContext('2d');
   const RES = 2;
   canvas.width = W * RES;
@@ -133,6 +135,11 @@
         if (ch === '*') loot.push({ kind: 'gem', x, y, got: false });
       }
     }
+    const VAL_KINDS = [['cash', 'a bundle of cash'], ['watch', 'a gold watch'], ['jewels', 'a jewellery box']];
+    (def.objects || []).filter((o) => o.type === 'valuable').forEach((o, k) => {
+      const v = VAL_KINDS[(index + k) % VAL_KINDS.length];
+      loot.push({ kind: 'val', x: o.x, y: o.y, got: false, variant: v[0], label: v[1] });
+    });
     L = {
       index, def, grid, loot, exit,
       act: def.act || 0,
@@ -150,8 +157,7 @@
       },
     };
     (def.objects || []).forEach(spawnObject);
-    L.bg = buildBackground();
-    L.fg = buildForeground();
+    if (render3dOK) R.build(L, { solid, ladder, ladderTop });
   }
 
   function spawnObject(o) {
@@ -318,7 +324,7 @@
 
     if (p.climbing) {
       p.onGround = false;
-      if (Input.hit('jumpOnly')) { p.climbing = false; p.vy = -JUMP_V * 0.8; p.vx = (right - left) * WALK; }
+      if (Input.hit('jumpOnly')) { p.climbing = false; p.vy = -JUMP_V * 0.75; p.vx = (right - left) * WALK; }
       else if ((left || right) && !upHeld && !downHeld) { p.climbing = false; }
       else {
         p.vy = upHeld ? -CLIMB : downHeld ? CLIMB : 0;
@@ -352,7 +358,7 @@
     }
     if (Input.let('jump') && p.vy < 0) p.vy *= 0.5;
 
-    p.vy = Math.min(p.vy + GRAV * dt, MAX_FALL);
+    p.vy = Math.min(p.vy + (p.vy > 0 ? FALL_GRAV : GRAV) * dt, MAX_FALL);
     p.onGround = false;
     moveX(p, p.vx * dt);
     moveY(p, p.vy * dt);
@@ -515,9 +521,12 @@
         if (it.kind === 'art') {
           showToast(`Lifted “${it.title}” (${it.value})`);
           burst(it.x * T + T / 2, it.y * T + T / 2, '#f2c46d', 18);
+        } else if (it.kind === 'val') {
+          showToast(`Pocketed ${it.label}`);
+          burst(it.x * T + T / 2, it.y * T + T / 2, '#ffe9a8', 10);
         } else {
-          showToast('Bonus gem');
-          burst(it.x * T + T / 2, it.y * T + T / 2, '#8fe9ff', 14);
+          showToast('Bonus gem!');
+          burst(it.x * T + T / 2, it.y * T + T / 2, '#8fe9ff', 16);
         }
       }
     }
@@ -556,274 +565,24 @@
     if (mode === 'play') updateSecurity(dt);
   }
 
-  // ───────────────────────── 9. Drawing ─────────────────────────
-  function makeLayer() {
-    const c = document.createElement('canvas');
-    c.width = W * RES; c.height = H * RES;
-    const g = c.getContext('2d');
-    g.scale(RES, RES);
-    return [c, g];
-  }
+  // ───────────────────────── 9. HUD ─────────────────────────
+  // The 3D scene is drawn by render3d.js (window.NightShiftRender). If WebGL is missing, a message shows instead.
+  const R = window.NightShiftRender;
+  let render3dOK = false;
+  try { R.init($('view')); render3dOK = true; } catch (e) { console.error(e); $('no-webgl').hidden = false; }
 
-  function buildBackground() {
-    const [c, g] = makeLayer();
-    const st = ACT_STYLE[L.act] || ACT_STYLE[0];
-    g.fillStyle = st.wall; g.fillRect(0, 0, W, H);
-    // wallpaper stripes
-    g.fillStyle = st.stripe;
-    for (let x = 0; x < W; x += 24) g.fillRect(x, 0, 10, H);
-    // dado rail one tile above every floor, skirting board along every floor
-    for (let y = 1; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (solid(x, y) && !solid(x, y - 1)) {
-        g.fillStyle = st.trim; g.globalAlpha = 0.35; g.fillRect(x * T, y * T - 34, T, 2);
-        g.globalAlpha = 0.6; g.fillRect(x * T, y * T - 6, T, 6);
-        g.globalAlpha = 1;
-      }
-    }
-    // soft ceiling lights
-    for (let y = 1; y < ROWS; y++) for (let x = 2; x < COLS - 2; x += 6) {
-      if (solid(x, y - 1) && !solid(x, y)) {
-        const gr = g.createRadialGradient(x * T + 16, y * T, 2, x * T + 16, y * T, 90);
-        gr.addColorStop(0, 'rgba(255,230,190,0.10)'); gr.addColorStop(1, 'rgba(255,230,190,0)');
-        g.fillStyle = gr; g.fillRect(x * T - 80, y * T, 192, 100);
-      }
-    }
-    return c;
-  }
+  const toScreen = (px, py) => (render3dOK ? R.project(px, py) : { x: px, y: py });
 
-  function buildForeground() {
-    const [c, g] = makeLayer();
-    const st = ACT_STYLE[L.act] || ACT_STYLE[0];
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (!solid(x, y)) continue;
-      g.fillStyle = st.mass; g.fillRect(x * T, y * T, T, T);
-      // concrete hatching
-      g.strokeStyle = st.edge; g.globalAlpha = 0.18; g.lineWidth = 1;
-      g.beginPath();
-      for (let k = -T; k < T; k += 8) { g.moveTo(x * T + k, y * T + T); g.lineTo(x * T + k + T, y * T); }
-      g.save(); g.beginPath(); g.rect(x * T, y * T, T, T); g.clip();
-      g.beginPath();
-      for (let k = -T; k < T; k += 8) { g.moveTo(x * T + k, y * T + T); g.lineTo(x * T + k + T, y * T); }
-      g.stroke(); g.restore();
-      g.globalAlpha = 1;
-      // exposed edges
-      g.fillStyle = st.edge;
-      if (!solid(x, y - 1) && y > 0) { g.fillRect(x * T, y * T, T, 4); g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x * T, y * T, T, 1); g.fillStyle = st.edge; }
-      if (!solid(x, y + 1) && y < ROWS - 1) g.fillRect(x * T, y * T + T - 2, T, 2);
-      if (!solid(x - 1, y) && x > 0) g.fillRect(x * T, y * T, 2, T);
-      if (!solid(x + 1, y) && x < COLS - 1) g.fillRect(x * T + T - 2, y * T, 2, T);
-    }
-    // ladders
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (!ladder(x, y)) continue;
-      g.fillStyle = '#7d8197';
-      g.fillRect(x * T + 6, y * T, 3, T); g.fillRect(x * T + T - 9, y * T, 3, T);
-      g.fillStyle = '#9ea2b6';
-      for (let k = 4; k < T; k += 9) g.fillRect(x * T + 6, y * T + k, T - 12, 3);
-    }
-    return c;
-  }
-
-  function drawCones() {
-    for (const c of getCones()) {
-      const seeing = c.src.seeing;
-      const sentry = c.kind === 'sentry';
-      const steps = 40;
-      ctx.beginPath();
-      ctx.moveTo(c.ox, c.oy);
-      for (let i = 0; i <= steps; i++) {
-        const a = c.angle - c.fov / 2 + (c.fov * i) / steps;
-        const d = castRay(c.ox, c.oy, a, c.range);
-        ctx.lineTo(c.ox + Math.cos(a) * d, c.oy + Math.sin(a) * d);
-      }
-      ctx.closePath();
-      const g = ctx.createRadialGradient(c.ox, c.oy, 4, c.ox, c.oy, c.range);
-      const col = seeing ? '255,72,64' : sentry ? '255,110,90' : '255,226,150';
-      g.addColorStop(0, `rgba(${col},${seeing ? 0.42 : 0.26})`);
-      g.addColorStop(1, `rgba(${col},${seeing ? 0.14 : 0.04})`);
-      ctx.fillStyle = g;
-      ctx.fill();
-    }
-  }
-
-  function drawShadows() {
-    for (const s of L.shadows) {
-      ctx.fillStyle = 'rgba(3,3,9,0.78)';
-      ctx.fillRect(s.x, s.y, s.w, s.h);
-      // faint curtain folds so dark areas read as places, not holes
-      ctx.strokeStyle = 'rgba(120,110,160,0.10)'; ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let x = s.x + 5; x < s.x + s.w; x += 7) { ctx.moveTo(x, s.y + 2); ctx.lineTo(x, s.y + s.h - 2); }
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(150,140,200,0.22)';
-      ctx.setLineDash([3, 4]);
-      ctx.strokeRect(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1);
-      ctx.setLineDash([]);
-    }
-  }
-
-  function drawDoor() {
-    const x = L.exit.x * T, y = (L.exit.y - 1) * T;
-    const open = L.loot.every((i) => i.kind !== 'art' || i.got);
-    ctx.fillStyle = '#3c3a4a'; ctx.fillRect(x + 2, y + 2, T - 4, 2 * T - 2);
-    ctx.fillStyle = open ? '#1d3b2f' : '#231c22'; ctx.fillRect(x + 6, y + 8, T - 12, 2 * T - 8);
-    ctx.fillStyle = '#c9c3b5'; ctx.fillRect(x + T - 12, y + 34, 3, 6);
-    // EXIT sign
-    ctx.fillStyle = open ? '#4be08f' : '#e25050';
-    ctx.globalAlpha = 0.85 + 0.15 * Math.sin(clock * 4);
-    ctx.fillRect(x + 4, y - 8, T - 8, 8);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#071008'; ctx.font = `bold 7px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('EXIT', x + T / 2, y - 3.5);
-  }
-
-  function drawLoot() {
-    for (const it of L.loot) {
-      if (it.got) continue;
-      const x = it.x * T, y = it.y * T;
-      if (it.kind === 'art') {
-        ctx.fillStyle = '#b8903f'; ctx.fillRect(x + 3, y + 4, 26, 22);
-        ctx.fillStyle = '#e7c76f'; ctx.fillRect(x + 4, y + 5, 24, 1);
-        const g = ctx.createLinearGradient(0, y + 7, 0, y + 23);
-        g.addColorStop(0, `hsl(${it.hue},45%,62%)`); g.addColorStop(1, `hsl(${(it.hue + 40) % 360},40%,32%)`);
-        ctx.fillStyle = g; ctx.fillRect(x + 6, y + 7, 20, 16);
-        ctx.fillStyle = `hsl(${(it.hue + 180) % 360},35%,25%)`;
-        ctx.beginPath(); ctx.moveTo(x + 6, y + 23); ctx.lineTo(x + 13, y + 15); ctx.lineTo(x + 18, y + 19); ctx.lineTo(x + 26, y + 13); ctx.lineTo(x + 26, y + 23); ctx.fill();
-        ctx.strokeStyle = 'rgba(242,196,109,0.5)'; ctx.globalAlpha = 0.4 + 0.3 * Math.sin(clock * 3 + it.x);
-        ctx.strokeRect(x + 1.5, y + 2.5, 29, 25); ctx.globalAlpha = 1;
-      } else {
-        const bob = Math.sin(clock * 3 + it.x) * 2;
-        const cx = x + T / 2, cy = y + T / 2 + bob;
-        ctx.fillStyle = '#8fe9ff';
-        ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx + 7, cy - 1); ctx.lineTo(cx, cy + 8); ctx.lineTo(cx - 7, cy - 1); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#e6fbff';
-        ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx + 3, cy - 1); ctx.lineTo(cx, cy + 1); ctx.lineTo(cx - 3, cy - 1); ctx.closePath(); ctx.fill();
-      }
-    }
-  }
-
-  function drawLaser(o) {
-    // emitters
-    ctx.fillStyle = '#545867';
-    const horiz = Math.abs(o.y2 - o.y1) < Math.abs(o.x2 - o.x1);
-    for (const [ex, ey] of [[o.x1, o.y1], [o.x2, o.y2]]) {
-      if (horiz) ctx.fillRect(ex - 3, ey - 6, 6, 12); else ctx.fillRect(ex - 6, ey - 3, 12, 6);
-    }
-    if (o.live) {
-      const pulse = 0.75 + 0.25 * Math.sin(clock * 30 + o.x1);
-      ctx.strokeStyle = `rgba(255,60,60,${0.25 * pulse})`; ctx.lineWidth = 8;
-      ctx.beginPath(); ctx.moveTo(o.x1, o.y1); ctx.lineTo(o.x2, o.y2); ctx.stroke();
-      ctx.strokeStyle = '#ff5a52'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(o.x1, o.y1); ctx.lineTo(o.x2, o.y2); ctx.stroke();
-      ctx.strokeStyle = '#ffd4cf'; ctx.lineWidth = 0.7;
-      ctx.beginPath(); ctx.moveTo(o.x1, o.y1); ctx.lineTo(o.x2, o.y2); ctx.stroke();
-    } else {
-      let warn = false;
-      if (!o.disabled && o.on) { const ph = (L.time + o.offset) % (o.on + o.off); warn = ph > o.on + o.off - 0.35; }
-      ctx.strokeStyle = o.disabled ? 'rgba(124,242,196,0.18)' : warn ? 'rgba(255,90,82,0.6)' : 'rgba(255,90,82,0.14)';
-      ctx.lineWidth = 1; ctx.setLineDash([2, 5]);
-      ctx.beginPath(); ctx.moveTo(o.x1, o.y1); ctx.lineTo(o.x2, o.y2); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    ctx.lineWidth = 1;
-  }
-
-  function drawPanel(o) {
-    const x = o.x + 7, y = o.y + 5;
-    ctx.fillStyle = '#2b3040'; ctx.fillRect(x, y, 18, 22);
-    ctx.fillStyle = o.used ? '#2bbf88' : o.cooldown > 0 ? '#c9a13a' : '#3f86ff';
-    ctx.globalAlpha = 0.7 + 0.3 * Math.sin(clock * 5);
-    ctx.fillRect(x + 3, y + 3, 12, 8); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#596079';
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) ctx.fillRect(x + 3 + i * 4, y + 14 + j * 4, 3, 3);
-    if (o.progress > 0) {
-      ctx.strokeStyle = '#7cf2c4'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(o.x + T / 2, o.y - 12, 9, -Math.PI / 2, -Math.PI / 2 + o.progress * Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 1;
-    }
-  }
-
-  function drawCamera(o) {
-    const sentry = o.kind === 'sentry';
-    ctx.save();
-    ctx.translate(o.x, o.y);
-    ctx.fillStyle = '#3a3e4e'; ctx.fillRect(-2, -6, 4, 6);
-    ctx.rotate(o.angle);
-    ctx.fillStyle = o.off > 0 ? '#555a66' : sentry ? '#6b2a2a' : '#c7c9d3';
-    ctx.fillRect(-6, -5, 16, 10);
-    ctx.fillStyle = '#20232c'; ctx.fillRect(9, -3, 4, 6);
-    ctx.restore();
-    const blink = Math.sin(clock * 6 + o.x) > 0;
-    ctx.fillStyle = o.off > 0 ? '#7cf2c4' : o.seeing ? '#ff3b3b' : blink ? '#ff6b6b' : '#5a2020';
-    ctx.beginPath(); ctx.arc(o.x, o.y - 1, 1.6, 0, Math.PI * 2); ctx.fill();
-    if (o.off > 0) {
-      ctx.fillStyle = '#7cf2c4'; ctx.font = `600 9px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(`LOOP ${Math.ceil(o.off)}`, o.x, o.y + 10);
-    }
-  }
-
-  function drawDrone(o) {
-    ctx.save(); ctx.translate(o.x, o.y);
-    ctx.strokeStyle = '#9aa3b5'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(-14, -4); ctx.lineTo(14, -4); ctx.stroke();
-    for (const s of [-14, 14]) {
-      const w = 7 * Math.abs(Math.cos(o.spin + s));
-      ctx.beginPath(); ctx.moveTo(s - w, -7); ctx.lineTo(s + w, -7); ctx.stroke();
-    }
-    ctx.fillStyle = '#2e3445'; ctx.beginPath(); ctx.ellipse(0, 0, 10, 6, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = o.seeing ? '#ff3b3b' : '#ffd479'; ctx.beginPath(); ctx.arc(0, 5, 2.5, 0, Math.PI * 2); ctx.fill();
-    ctx.restore(); ctx.lineWidth = 1;
-  }
-
-  // A simple figure: used for the thief and the guards.
-  function drawFigure(x, feet, h, facing, step, look) {
-    const ducking = h < P_HS - 4;
-    const legH = ducking ? 6 : 16;
-    const swing = Math.sin(step * 2) * (ducking ? 2 : 4);
-    ctx.fillStyle = look.legs;
-    ctx.fillRect(x - 6 + swing * 0.5, feet - legH, 5, legH);
-    ctx.fillRect(x + 1 - swing * 0.5, feet - legH, 5, legH);
-    const bodyTop = feet - h + 14;
-    ctx.fillStyle = look.body;
-    roundRect(x - 8, bodyTop, 16, h - 14 - legH + 3, 4); ctx.fill();
-    if (look.stripes) {
-      ctx.fillStyle = look.stripes;
-      for (let y = bodyTop + 4; y < feet - legH - 2; y += 6) ctx.fillRect(x - 8, y, 16, 2);
-    }
-    if (look.badge) { ctx.fillStyle = look.badge; ctx.fillRect(x + facing * 3 - 1.5, bodyTop + 4, 3, 3); }
-    // head
-    const hy = feet - h + 7;
-    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(x + facing * 1, hy, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = look.hat; ctx.beginPath(); ctx.arc(x + facing * 1, hy - 1, 7.2, Math.PI, 0); ctx.fill();
-    if (look.brim) ctx.fillRect(x + facing * 1 - 2 + facing * 4, hy - 2, 7, 2);
-    if (look.mask) { ctx.fillStyle = look.mask; ctx.fillRect(x + facing * 1 - 6, hy - 1, 12, 3); ctx.fillStyle = '#f4efe2'; ctx.fillRect(x + facing * 4, hy - 0.5, 2, 2); }
-    else { ctx.fillStyle = '#1a1a22'; ctx.fillRect(x + facing * 4, hy, 2, 2); }
-  }
-
-  function roundRect(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-  }
-
-  const THIEF = { legs: '#16161f', body: '#1f1f2a', stripes: '#3a3a4c', skin: '#d9b48f', hat: '#14141c', mask: '#0b0b10' };
-  const GUARD = { legs: '#1f2747', body: '#34437e', skin: '#c99a76', hat: '#1b2348', brim: true, badge: '#e8c35a' };
-
-  function drawPlayer() {
-    const p = L.player;
-    if (mode === 'title' || mode === 'select') return;
-    ctx.save();
-    if (p.hidden) ctx.globalAlpha = 0.45;
-    drawFigure(p.x + p.w / 2, p.y + p.h, p.h, p.facing, p.walk, THIEF);
-    ctx.restore();
-    if (p.hidden) {
-      ctx.strokeStyle = 'rgba(160,150,230,0.7)'; ctx.setLineDash([2, 3]);
-      ctx.strokeRect(p.x - 3.5, p.y - 2.5, p.w + 7, p.h + 3); ctx.setLineDash([]);
-    }
+  function label(text, x, y, color, bg) {
+    ctx.font = `600 11px ${FONT_MONO}`;
+    const tw = ctx.measureText(text).width + 14;
+    const px = clamp(x, tw / 2 + 4, W - tw / 2 - 4);
+    ctx.fillStyle = bg || 'rgba(8,8,14,0.85)'; ctx.fillRect(px - tw / 2, y - 9, tw, 18);
+    ctx.fillStyle = color || '#e9e4f5'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, px, y);
   }
 
   function drawHUD() {
-    // top bar sits over the building's roof line
     ctx.fillStyle = 'rgba(6,6,12,0.82)'; ctx.fillRect(0, 0, W, 26);
     ctx.textBaseline = 'middle';
     ctx.font = `600 12px ${FONT_MONO}`; ctx.textAlign = 'left'; ctx.fillStyle = '#9c96b3';
@@ -836,40 +595,56 @@
     ctx.font = `600 10px ${FONT_MONO}`; ctx.fillStyle = '#9c96b3'; ctx.textAlign = 'right';
     ctx.fillText(L.heatMode ? 'HEAT' : 'SEEN', bx - 8, 13);
     ctx.fillStyle = '#1b1a26'; ctx.fillRect(bx, 8, bw, 10);
-    if (L.heatMode) {
-      ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(bx + bw * 0.33, 6, 1, 14); ctx.fillRect(bx + bw * 0.66, 6, 1, 14);
-    }
-    const hc = L.heat >= 66 ? '#ff4d43' : L.heat >= 33 ? '#ffae3d' : '#f2d46d';
-    ctx.fillStyle = hc; ctx.fillRect(bx, 8, (bw * L.heat) / 100, 10);
+    if (L.heatMode) { ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(bx + bw * 0.33, 6, 1, 14); ctx.fillRect(bx + bw * 0.66, 6, 1, 14); }
+    ctx.fillStyle = L.heat >= 66 ? '#ff4d43' : L.heat >= 33 ? '#ffae3d' : '#f2d46d';
+    ctx.fillRect(bx, 8, (bw * L.heat) / 100, 10);
     const tier = L.heatMode ? (L.heat >= 66 ? 'LOCKDOWN' : L.heat >= 33 ? 'ALERT' : 'QUIET') : L.seenNow ? 'SPOTTED' : 'UNSEEN';
     ctx.textAlign = 'left'; ctx.fillStyle = L.seenNow ? '#ff6b61' : '#9c96b3';
     ctx.fillText(tier, bx + bw + 8, 13);
 
-    // loot + time
-    const arts = L.loot.filter((i) => i.kind === 'art'), gems = L.loot.filter((i) => i.kind === 'gem');
-    ctx.textAlign = 'right'; ctx.fillStyle = '#f2c46d'; ctx.font = `600 12px ${FONT_MONO}`;
+    // loot counters + time (paintings ▣, valuables ●, gem ◆)
+    const count = (k) => { const a = L.loot.filter((i) => i.kind === k); return [a.filter((i) => i.got).length, a.length]; };
+    ctx.textAlign = 'right'; ctx.font = `600 12px ${FONT_MONO}`;
     let rx = W - 12;
     ctx.fillStyle = '#cfc9dc'; ctx.fillText(fmtTime(L.time), rx, 13); rx -= 62;
-    if (gems.length) { ctx.fillStyle = '#8fe9ff'; ctx.fillText(`◆ ${gems.filter((g) => g.got).length}/${gems.length}`, rx, 13); rx -= 56; }
-    ctx.fillStyle = '#f2c46d'; ctx.fillText(`▣ ${arts.filter((a) => a.got).length}/${arts.length}`, rx, 13);
+    const [g1, g2] = count('gem');
+    if (g2) { ctx.fillStyle = g1 ? '#8fe9ff' : '#4f6f7a'; ctx.fillText('◆', rx, 13); rx -= 26; }
+    const [v1, v2] = count('val');
+    if (v2) { ctx.fillStyle = '#ffe3a0'; ctx.fillText(`● ${v1}/${v2}`, rx, 13); rx -= 56; }
+    const [a1, a2] = count('art');
+    ctx.fillStyle = '#f2c46d'; ctx.fillText(`▣ ${a1}/${a2}`, rx, 13);
 
-    // hint along the bottom
     ctx.fillStyle = 'rgba(6,6,12,0.7)'; ctx.fillRect(0, H - 24, W, 24);
     ctx.font = `500 13px ${FONT_UI}`; ctx.fillStyle = '#b9b3cc'; ctx.textAlign = 'center';
     ctx.fillText(L.def.hint || '', W / 2, H - 12);
+    ctx.font = `600 10px ${FONT_MONO}`; ctx.textAlign = 'right'; ctx.fillStyle = '#5d5874';
+    ctx.fillText(VERSION, W - 10, H - 12);
 
-    // prompts and toasts
-    const p = L.player;
-    if (L.prompt && mode === 'play') {
-      ctx.font = `600 11px ${FONT_MONO}`;
-      const tw = ctx.measureText(L.prompt).width + 14;
-      const px = clamp(p.x + p.w / 2, tw / 2 + 4, W - tw / 2 - 4), py = p.y - 20;
-      ctx.fillStyle = 'rgba(8,8,14,0.85)'; ctx.fillRect(px - tw / 2, py - 9, tw, 18);
-      ctx.fillStyle = '#e9e4f5'; ctx.fillText(L.prompt, px, py);
+    // markers above guards that can see you, panel progress, prompts
+    for (const o of L.objects) {
+      if ((o.kind === 'guard' || o.kind === 'drone') && o.seeing) {
+        const s = toScreen(o.x, o.kind === 'guard' ? o.feet - P_HS - 14 : o.y - 22);
+        ctx.fillStyle = '#ff4d43'; ctx.font = `20px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.fillText('!', s.x, s.y);
+      }
+      if (o.kind === 'panel' && o.progress > 0) {
+        const s = toScreen(o.x + T / 2, o.y - 14);
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#7cf2c4'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 10, -Math.PI / 2, -Math.PI / 2 + o.progress * Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      if ((o.kind === 'camera' || o.kind === 'sentry') && o.off > 0) {
+        const s = toScreen(o.x, o.y + 20);
+        label(`LOOP ${Math.ceil(o.off)}`, s.x, s.y, '#7cf2c4');
+      }
     }
+    const p = L.player;
+    if (L.prompt && mode === 'play') { const s = toScreen(p.x + p.w / 2, p.y - 16); label(L.prompt, s.x, s.y); }
+    else if (p.hidden && mode === 'play') { const s = toScreen(p.x + p.w / 2, p.y - 14); label('HIDDEN', s.x, s.y, '#b9a8ff', 'rgba(20,14,40,0.8)'); }
     if (L.toast) {
       ctx.globalAlpha = Math.min(1, L.toast.t * 2);
-      ctx.font = `600 13px ${FONT_UI}`;
+      ctx.font = `600 13px ${FONT_UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const tw = ctx.measureText(L.toast.text).width + 24;
       ctx.fillStyle = 'rgba(8,8,14,0.9)'; ctx.fillRect(W / 2 - tw / 2, 36, tw, 24);
       ctx.fillStyle = '#f2c46d'; ctx.fillRect(W / 2 - tw / 2, 36, 3, 24);
@@ -878,34 +653,15 @@
     }
   }
 
-  function render() {
+  function render(dt) {
     ctx.setTransform(RES, 0, 0, RES, 0, 0);
-    if (!L) { ctx.fillStyle = '#07070c'; ctx.fillRect(0, 0, W, H); return; }
-    ctx.save();
-    if (L.shake > 0) ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
-    ctx.drawImage(L.bg, 0, 0, W, H);
-    drawCones();
-    drawShadows();
-    ctx.drawImage(L.fg, 0, 0, W, H);
-    drawDoor();
-    drawLoot();
-    for (const o of L.objects) if (o.kind === 'panel') drawPanel(o);
-    for (const o of L.objects) if (o.kind === 'laser') drawLaser(o);
-    for (const o of L.objects) if (o.kind === 'guard') {
-      drawFigure(o.x, o.feet, P_HS, o.dir, o.step, GUARD);
-      if (o.seeing) { ctx.fillStyle = '#ff4d43'; ctx.font = `bold 16px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.fillText('!', o.x, o.feet - P_HS - 10); }
-    }
-    for (const o of L.objects) if (o.kind === 'camera' || o.kind === 'sentry') drawCamera(o);
-    for (const o of L.objects) if (o.kind === 'drone') drawDrone(o);
-    drawPlayer();
-    for (const pt of L.particles) { ctx.globalAlpha = clamp(pt.life, 0, 1); ctx.fillStyle = pt.color; ctx.fillRect(pt.x - 1.5, pt.y - 1.5, 3, 3); }
-    ctx.globalAlpha = 1;
-    ctx.restore();
+    ctx.clearRect(0, 0, W, H);
+    if (!L) return;
+    if (render3dOK) R.frame(L, { mode, clock, dt, getCones, castRay });
     if (L.flash > 0 || mode === 'caught') {
-      ctx.fillStyle = `rgba(255,40,40,${mode === 'caught' ? 0.22 : L.flash * 0.6})`; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = `rgba(255,40,40,${mode === 'caught' ? 0.18 : L.flash * 0.5})`; ctx.fillRect(0, 0, W, H);
     }
     if (mode !== 'title' && mode !== 'select') drawHUD();
-    else { ctx.fillStyle = 'rgba(5,5,10,0.35)'; ctx.fillRect(0, 0, W, H); }
   }
 
   // ───────────────────────── 10. Menus and main loop ─────────────────────────
@@ -939,19 +695,24 @@
 
   function win() {
     mode = 'won';
-    const allLoot = L.loot.every((i) => i.got);
-    const stars = [true, !L.everSeen, allLoot];
+    const vals = L.loot.filter((i) => i.kind === 'val');
+    const allVals = vals.every((i) => i.got);
+    const gems = L.loot.filter((i) => i.kind === 'gem');
+    const gotGem = gems.length > 0 && gems.every((i) => i.got);
+    const stars = [true, !L.everSeen, allVals];
     const count = stars.filter(Boolean).length;
     const prev = save.best[L.index];
     save.best[L.index] = {
       stars: Math.max(count, prev?.stars || 0),
+      gem: gotGem || !!prev?.gem,
       time: prev?.time ? Math.min(prev.time, L.time) : L.time,
     };
     save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, L.index + 2));
     persist();
     $('won-title').textContent = !L.everSeen ? 'Clean getaway' : count >= 2 ? 'Got away' : 'Made it out';
-    const labels = ['Escaped', 'Never spotted', allLoot ? 'Took everything' : 'Left something behind'];
-    $('won-stars').innerHTML = stars.map((s, k) => `<li class="${s ? 'earned' : ''}"><span class="star" aria-hidden="true">★</span>${k === 2 ? labels[2] : labels[k]}</li>`).join('');
+    const labels = ['Escaped', 'Never spotted', allVals ? 'Took every valuable' : `Valuables ${vals.filter((v) => v.got).length} of ${vals.length}`];
+    $('won-stars').innerHTML = stars.map((s, k) => `<li class="${s ? 'earned' : ''}"><span class="star" aria-hidden="true">★</span>${labels[k]}</li>`).join('') +
+      (gems.length ? `<li class="gem ${gotGem ? 'earned' : ''}"><span class="star" aria-hidden="true">◆</span>${gotGem ? 'Bonus gem' : 'Bonus gem missed'}</li>` : '');
     const arts = L.loot.filter((i) => i.kind === 'art' && i.got);
     $('won-haul').textContent = arts.map((a) => `“${a.title}” (${a.value})`).join(' · ');
     $('won-time').textContent = fmtTime(L.time);
@@ -979,7 +740,7 @@
         b.className = 'level';
         b.disabled = locked;
         b.innerHTML = `<span class="num">${pad2(i + 1)}</span><span class="name">${locked ? 'Locked' : lv.name}</span>` +
-          `<span class="stars" aria-label="${best?.stars || 0} of 3 stars">${[0, 1, 2].map((k) => `<i class="${best && best.stars > k ? 'on' : ''}">★</i>`).join('')}</span>`;
+          `<span class="stars" aria-label="${best?.stars || 0} of 3 stars${best?.gem ? ', gem collected' : ''}">${[0, 1, 2].map((k) => `<i class="${best && best.stars > k ? 'on' : ''}">★</i>`).join('')}<i class="gem ${best?.gem ? 'on' : ''}">◆</i></span>`;
         b.addEventListener('click', () => startLevel(i));
         list.appendChild(b);
       });
@@ -992,14 +753,15 @@
     mode = 'select';
     buildSelect();
     show('select');
-    if (!L) { loadLevel(4); }
+    if (!L) { loadLevel(9); }
   }
 
   function openTitle() {
     mode = 'title';
-    loadLevel(4);
+    loadLevel(9);
     const next = Math.min(save.unlocked, LEVELS.length) - 1;
     $('btn-play').textContent = Object.keys(save.best).length ? `Continue · ${pad2(next + 1)} ${LEVELS[next].name}` : 'Start the job';
+    $('version').textContent = VERSION;
     show('title');
   }
 
@@ -1042,7 +804,7 @@
       acc = 0;
       Input.endStep();
     }
-    render();
+    render(dt);
     requestAnimationFrame(frame);
   }
 
@@ -1051,6 +813,8 @@
     load: (i) => startLevel(i),
     get state() { return { mode, level: L && L.index, heat: L && L.heat, player: L && { ...L.player } }; },
     _level: () => L,
+    _debug: { castRay, coneSees, getCones, inShadow, updateObjects, alertLevel, step: (dt) => { update(dt); Input.endStep(); }, input: Input },
+    version: VERSION,
   };
 
   openTitle();

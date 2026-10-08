@@ -11,7 +11,7 @@
     P   player start (feet stand on the tile below)
     E   exit door (the bottom tile of the door; the door is 2 tiles tall)
     $   painting — you must take every painting before the exit unlocks
-    *   bonus gem — optional, needed for the third star
+    *   bonus gem — optional and tracked on its own (shown as ◆ next to the stars)
 
   OBJECTS (all positions are in tiles; decimals are fine)
     camera   { x, y, angle, sweep, period, phase, fov, range, id }
@@ -20,6 +20,7 @@
     guard    { x, from, to, y, speed }   y = the floor row the guard walks on
     drone    { path: [[x,y], [x,y], ...], speed, fov, range }
     laser    { x1, y1, x2, y2, on, off, offset, id }  on/off in seconds = pulsing
+    valuable { x, y }   optional loot (cash, watches, jewellery) — take them all for the third star
     panel    { x, y, targets: [ids], duration }   hold E to hack.
              Lasers it targets switch off for good; cameras loop for `duration` seconds.
 
@@ -53,7 +54,9 @@ window.NIGHT_SHIFT_LEVELS = [
       '#..P.......###.......###..E..#',
       WALL,
     ],
-    objects: [],
+    objects: [
+      { type: 'valuable', x: 17, y: 15 }, { type: 'valuable', x: 6, y: 13 },
+    ],
   },
   {
     name: 'Low Profile',
@@ -67,7 +70,9 @@ window.NIGHT_SHIFT_LEVELS = [
       '#.P...................$...E..#',
       WALL,
     ],
-    objects: [],
+    objects: [
+      { type: 'valuable', x: 14, y: 15 }, { type: 'valuable', x: 26, y: 13 },
+    ],
   },
   {
     name: 'Lights Out',
@@ -83,6 +88,7 @@ window.NIGHT_SHIFT_LEVELS = [
     ],
     shadows: [{ x: 10, y: 15, w: 9, h: 1 }],
     objects: [
+      { type: 'valuable', x: 6, y: 15 }, { type: 'valuable', x: 21, y: 13 },
       { type: 'camera', x: 14.5, y: 12.15, angle: 90, fov: 70, range: 5 },
     ],
   },
@@ -105,6 +111,7 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     objects: [
+      { type: 'valuable', x: 8, y: 10 }, { type: 'valuable', x: 26, y: 13 },
       { type: 'camera', x: 14.5, y: 12.15, angle: 90, fov: 100, range: 6 },
     ],
   },
@@ -126,6 +133,7 @@ window.NIGHT_SHIFT_LEVELS = [
       { x: 21, y: 12, w: 2, h: 4 },
     ],
     objects: [
+      { type: 'valuable', x: 11, y: 15 }, { type: 'valuable', x: 19, y: 14 },
       { type: 'camera', x: 15.5, y: 12.15, angle: 90, sweep: 55, period: 4.5, fov: 34, range: 6.5 },
     ],
   },
@@ -154,6 +162,7 @@ window.NIGHT_SHIFT_LEVELS = [
       { x: 19, y: 12, w: 2, h: 4 },
     ],
     objects: [
+      { type: 'valuable', x: 14, y: 10 }, { type: 'valuable', x: 7, y: 15 },
       { type: 'guard', x: 8, from: 8, to: 22, y: 16, speed: 1.6 },
     ],
   },
@@ -187,6 +196,7 @@ window.NIGHT_SHIFT_LEVELS = [
       { x: 20, y: 12, w: 2, h: 4 },
     ],
     objects: [
+      { type: 'valuable', x: 20, y: 4 }, { type: 'valuable', x: 17, y: 15 },
       { type: 'guard', x: 6, from: 6, to: 23, y: 11, speed: 1.5 },
       { type: 'guard', x: 9, from: 9, to: 24, y: 16, speed: 1.7 },
     ],
@@ -210,12 +220,16 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     shadows: [
+      { x: 1, y: 6, w: 5, h: 5 },
+      { x: 24, y: 6, w: 4, h: 5 },
       { x: 9, y: 12, w: 2, h: 4 },
+      { x: 16, y: 12, w: 2, h: 4 },
       { x: 19, y: 12, w: 2, h: 4 },
     ],
     objects: [
-      { type: 'guard', x: 8, from: 8, to: 21, y: 11, speed: 1.5 },
-      { type: 'camera', x: 15.5, y: 12.15, angle: 90, sweep: 50, period: 5, fov: 34, range: 6 },
+      { type: 'valuable', x: 12, y: 10 }, { type: 'valuable', x: 6, y: 15 },
+      { type: 'guard', x: 11, from: 11, to: 18, y: 11, speed: 1.3 },
+      { type: 'camera', x: 15.5, y: 12.15, angle: 90, sweep: 50, period: 6, fov: 30, range: 6 },
     ],
   },
   {
@@ -232,11 +246,14 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     shadows: [
+      { x: 1, y: 12, w: 3, h: 4 },
+      { x: 6, y: 12, w: 1, h: 4 },
       { x: 9, y: 12, w: 2, h: 4 },
       { x: 15, y: 12, w: 2, h: 4 },
-      { x: 23, y: 15, w: 3, h: 1 },
+      { x: 22, y: 15, w: 4, h: 1 },
     ],
     objects: [
+      { type: 'valuable', x: 5, y: 13 }, { type: 'valuable', x: 17, y: 15 },
       { type: 'camera', x: 7.5, y: 12.15, angle: 90, sweep: 45, period: 3.6, fov: 32, range: 6 },
       { type: 'camera', x: 16.5, y: 12.15, angle: 90, sweep: 50, period: 4.2, phase: 1.5, fov: 32, range: 6 },
       { type: 'camera', x: 26.5, y: 12.15, angle: 120, fov: 40, range: 6 },
@@ -270,11 +287,13 @@ window.NIGHT_SHIFT_LEVELS = [
       { x: 11, y: 1, w: 2, h: 4 },
       { x: 18, y: 1, w: 2, h: 4 },
       { x: 9, y: 6, w: 2, h: 5 },
+      { x: 15, y: 6, w: 2, h: 5 },
       { x: 19, y: 6, w: 2, h: 5 },
       { x: 9, y: 12, w: 2, h: 4 },
       { x: 17, y: 12, w: 2, h: 4 },
     ],
     objects: [
+      { type: 'valuable', x: 6, y: 4 }, { type: 'valuable', x: 24, y: 10 }, { type: 'valuable', x: 20, y: 15 },
       { type: 'guard', x: 6, from: 6, to: 21, y: 16, speed: 1.6 },
       { type: 'camera', x: 14.5, y: 6.15, angle: 90, sweep: 50, period: 4.5, fov: 34, range: 6.5 },
       { type: 'guard', x: 8, from: 7, to: 20, y: 5, speed: 1.5 },
@@ -302,6 +321,7 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     objects: [
+      { type: 'valuable', x: 8, y: 10 }, { type: 'valuable', x: 11, y: 15 },
       { type: 'laser', x1: 7, y1: 14.6, x2: 10, y2: 14.6 },
       { type: 'laser', x1: 12.4, y1: 15.55, x2: 13.6, y2: 15.55 },
       { type: 'laser', x1: 18.5, y1: 12, x2: 18.5, y2: 16 },
@@ -321,6 +341,7 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     objects: [
+      { type: 'valuable', x: 4, y: 13 }, { type: 'valuable', x: 16, y: 15 },
       { type: 'laser', x1: 6.5, y1: 12, x2: 6.5, y2: 16, on: 1.2, off: 1.4, offset: 0 },
       { type: 'laser', x1: 10.5, y1: 12, x2: 10.5, y2: 16, on: 1.2, off: 1.4, offset: 0.6 },
       { type: 'laser', x1: 13.5, y1: 12, x2: 13.5, y2: 16, on: 1.2, off: 1.4, offset: 1.2 },
@@ -332,6 +353,10 @@ window.NIGHT_SHIFT_LEVELS = [
     name: 'Backdoor',
     act: 2,
     heat: true,
+    shadows: [
+      { x: 16, y: 6, w: 2, h: 5 },
+      { x: 22, y: 6, w: 2, h: 5 },
+    ],
     hint: 'Stand at a hack panel and hold E · this one shuts the laser grid down for good',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL,
@@ -348,6 +373,7 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     objects: [
+      { type: 'valuable', x: 13, y: 10 }, { type: 'valuable', x: 6, y: 15 },
       { type: 'panel', x: 8, y: 10, targets: ['grid'] },
       { type: 'laser', id: 'grid', x1: 12.5, y1: 12, x2: 12.5, y2: 16 },
       { type: 'laser', id: 'grid', x1: 14.5, y1: 12, x2: 14.5, y2: 16 },
@@ -361,6 +387,10 @@ window.NIGHT_SHIFT_LEVELS = [
     name: 'Blind Spot',
     act: 2,
     heat: true,
+    shadows: [
+      { x: 22, y: 12, w: 2, h: 4 },
+      { x: 26, y: 12, w: 1, h: 4 },
+    ],
     hint: 'Hack the panel to loop the big camera for a few seconds · then run',
     map: [
       WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL, WALL,
@@ -371,9 +401,10 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     objects: [
+      { type: 'valuable', x: 4, y: 13 }, { type: 'valuable', x: 20, y: 15 },
       { type: 'panel', x: 6, y: 15, targets: ['cam'], duration: 6 },
       { type: 'camera', id: 'cam', x: 15.5, y: 12.15, angle: 90, fov: 110, range: 6 },
-      { type: 'camera', x: 25.5, y: 12.15, angle: 90, sweep: 40, period: 3.5, fov: 30, range: 6 },
+      { type: 'camera', x: 25.5, y: 12.15, angle: 90, sweep: 35, period: 5.5, fov: 26, range: 6 },
     ],
   },
   {
@@ -402,11 +433,13 @@ window.NIGHT_SHIFT_LEVELS = [
     ],
     shadows: [
       { x: 7, y: 1, w: 2, h: 4 },
+      { x: 12, y: 1, w: 2, h: 4 },
       { x: 17, y: 1, w: 2, h: 4 },
       { x: 9, y: 6, w: 2, h: 5 },
       { x: 16, y: 6, w: 2, h: 5 },
     ],
     objects: [
+      { type: 'valuable', x: 24, y: 4 }, { type: 'valuable', x: 20, y: 10 }, { type: 'valuable', x: 24, y: 15 },
       { type: 'camera', x: 12.5, y: 1.15, angle: 90, sweep: 55, period: 4, fov: 34, range: 5.5 },
       { type: 'panel', x: 20, y: 4, targets: ['vault'] },
       { type: 'guard', x: 6, from: 6, to: 22, y: 11, speed: 1.7 },
@@ -437,6 +470,7 @@ window.NIGHT_SHIFT_LEVELS = [
       WALL,
     ],
     objects: [
+      { type: 'valuable', x: 19, y: 15 }, { type: 'valuable', x: 14, y: 13 },
       { type: 'drone', path: [[26, 7.5], [3, 7.5]], speed: 2.4, fov: 56, range: 9 },
     ],
     reinforce: [
