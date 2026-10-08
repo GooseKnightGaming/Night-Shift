@@ -2,7 +2,7 @@
 
 A 2.5D stealth platformer by GooseKnightGaming. Get in, take the painting, get out without being seen.
 
-Current version: **V3**. You move side-on (2D rules), but the picture is 3D, drawn with Three.js (loaded from a CDN). No build step.
+Current version: **V4**. You move side-on (2D rules), but the picture is 3D, drawn with Three.js (loaded from a CDN). No build step.
 
 ## Play locally
 Open `index.html` in a browser. To unlock every level for testing, open `index.html#all`.
@@ -19,7 +19,8 @@ Open `index.html` in a browser. To unlock every level for testing, open `index.h
 | W / Space | Jump · W and S climb ladders |
 | S (or Ctrl) | Duck and crawl |
 | E | Hack a panel (hold) · leave through the exit door |
-| Q | Throw a decoy |
+| Q | Set up a decoy (a lookalike of you) |
+| F | Drop a noisemaker · F again sets it off |
 | R | Restart level |
 | Esc / P | Pause |
 
@@ -43,12 +44,24 @@ Every level has been checked automatically so that every painting, valuable, gem
 
 ## Money and the Safehouse
 Every painting, valuable and gem has a value. It pays into your bank the first time you escape with it (replays only pay for things you hadn't taken before).
-Spend the bank at the Safehouse: Quick Fingers (faster hacking), Loop Extender (longer camera loops), Cool Head (heat cools sooner), Dark Clothing (heat builds slower) and Decoys (press Q to throw; guards on that floor go and stare at it).
+Spend the bank at the Safehouse: Quick Fingers (faster hacking), Loop Extender (longer camera loops), Cool Head (heat cools sooner), Dark Clothing (heat builds slower), Decoys and Noisemakers.
 
-## Status
-Acts 1–3 (15 levels) are playable, plus a preview of Act 4. The engine already supports drones, sentries and heat-triggered reinforcements for the rest of Act 4.
+- **Decoy (Q):** a stand-in dressed exactly like you, set up where you stand. Guards on that floor walk over to check it, stare for a few seconds, then knock it over.
+- **Noisemaker (F):** press F to drop it, get clear, then press F again to set it off. Guards on that floor go to investigate for six seconds.
+
+## Levels
+23 levels in five acts: Corner Gallery, The Museum, The Bank, The Tower and The Machine. The last level is the meta finale: steal the game itself and leave through QUIT.
+
+Act 5 adds **glitch blocks** (`G` and `g` in the maps): they take turns flickering in and out, block movement and cameras while they're there, and never appear inside you.
 
 ## Changelog
+**V4**
+- Decoys now look like you and are set up where you stand; guards walk over, inspect, and knock them over.
+- New Noisemaker: drop it, walk away, set it off remotely with F.
+- Act 4 finished: Sentry, Response Team, Full Escalation, The Penthouse.
+- Act 5 The Machine: Glitch, Rerun and the finale Night Shift, with glitch blocks, a QUIT door and an ending.
+- Every level checked again so it can be finished without being spotted.
+
 **V3**
 - Lower jump (about 1.5 tiles). Crates are now 1 tile tall and high loot moved within reach.
 - The exit needs E, so loot near or past the door can be collected first.

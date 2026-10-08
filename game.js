@@ -19,7 +19,7 @@
   'use strict';
 
   // ───────────────────────── 1. Constants and setup ─────────────────────────
-  const VERSION = 'V3';
+  const VERSION = 'V4';
   const T = 32, COLS = 30, ROWS = 17;
   const W = COLS * T, H = ROWS * T;
   const LEVELS = window.NIGHT_SHIFT_LEVELS || [];
@@ -34,7 +34,8 @@
   // Money. Every item pays out once, the first time you escape with it.
   const VAL_VALUES = { cash: 150000, watch: 250000, jewels: 400000 };
   const GEM_VALUE = 1000000;
-  const DECOY_PRICE = 750000, DECOY_MAX = 3, DECOY_LIFE = 6;
+  const DECOY_PRICE = 750000, DECOY_MAX = 3, DECOY_LIFE = 14, DECOY_INSPECT = 2.5;   // lookalike decoy
+  const NOISE_PRICE = 500000, NOISE_MAX = 3, NOISE_RING = 6;                        // remote noisemaker
   const UPGRADES = [
     { id: 'hack', name: 'Quick Fingers', desc: 'Hack panels faster.', prices: [2000000, 5000000], tiers: ['Hacking takes 0.8s', 'Hacking takes 0.5s'] },
     { id: 'loop', name: 'Loop Extender', desc: 'Looped cameras stay blind for longer.', prices: [3000000, 6000000], tiers: ['+3s on every camera loop', '+6s on every camera loop'] },
@@ -84,6 +85,7 @@
     restart: ['KeyR'],
     pause: ['Escape', 'KeyP'],
     decoy: ['KeyQ'],
+    noise: ['KeyF'],
   };
   const GAME_KEYS = new Set(Object.values(BINDINGS).flat());
   const Input = {
@@ -104,7 +106,7 @@
 
   // ───────────────────────── 3. Save data ─────────────────────────
   const SAVE_KEY = 'nightshift.v1';
-  let save = { unlocked: 1, best: {}, bank: 0, taken: [], upgrades: {}, decoys: 0 };
+  let save = { unlocked: 1, best: {}, bank: 0, taken: [], upgrades: {}, decoys: 0, noise: 0 };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && typeof s === 'object') save = { ...save, ...s, upgrades: { ...(s.upgrades || {}) }, taken: s.taken || [] };
@@ -133,12 +135,12 @@
       grid.push([]);
       for (let x = 0; x < COLS; x++) {
         const ch = row[x] || '#';
-        grid[y].push(ch === '#' ? 1 : ch === 'H' ? 2 : 0);
+        grid[y].push(ch === '#' ? 1 : ch === 'H' ? 2 : ch === 'G' ? 3 : ch === 'g' ? 4 : 0);
         if (ch === 'P') start = { x, y };
         if (ch === 'E') exit = { x, y };
         if (ch === '$') {
-          const p = PAINTINGS[(index * 3 + artCount) % PAINTINGS.length];
-          loot.push({ kind: 'art', x, y, got: false, title: p[0], value: p[1], hue: PAINT_HUES[(index + artCount * 3) % PAINT_HUES.length] });
+          const p = def.final ? ['NIGHT SHIFT (the game itself)', 10000000] : PAINTINGS[(index * 3 + artCount) % PAINTINGS.length];
+          loot.push({ kind: 'art', x, y, got: false, title: p[0], value: p[1], hue: PAINT_HUES[(index + artCount * 3) % PAINT_HUES.length], variant: def.final ? 'cartridge' : 'painting' });
           artCount++;
         }
         if (ch === '*') loot.push({ kind: 'gem', x, y, got: false, value: GEM_VALUE });
@@ -151,7 +153,8 @@
     });
     loot.forEach((it) => { it.id = `${index}:${it.kind}:${it.x},${it.y}`; it.banked = save.taken.includes(it.id); });
     L = {
-      index, def, grid, loot, exit, decoys: [],
+      index, def, grid, loot, exit, decoys: [], noises: [],
+      glitch: def.glitch || { on: 2, off: 1.5 },
       act: def.act || 0,
       heatMode: true,
       shadows: (def.shadows || []).map((s) => ({ x: s.x * T, y: s.y * T, w: s.w * T, h: s.h * T })),
@@ -167,7 +170,11 @@
       },
     };
     (def.objects || []).forEach(spawnObject);
-    if (render3dOK) R.build(L, { solid, ladder, ladderTop });
+    if (render3dOK) R.build(L, {
+      solid: (x, y) => x < 0 || y < 0 || x >= COLS || y >= ROWS || grid[y][x] === 1,
+      ladder, ladderTop,
+      glitch: (x, y) => (grid[y] && (grid[y][x] === 3 || grid[y][x] === 4) ? grid[y][x] : 0),
+    });
   }
 
   function spawnObject(o) {
@@ -205,7 +212,21 @@
   }
 
   // ───────────────────────── 5. Tiles, collision, line of sight ─────────────────────────
-  function tileAt(tx, ty) { return tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS ? 1 : L.grid[ty][tx]; }
+  function tileAt(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return 1;
+    const t = L.grid[ty][tx];
+    if (t === 3 || t === 4) return glitchOn(t) && !(L.inside && L.inside.has(ty * COLS + tx)) ? 1 : 0;   // never appears inside the player
+    return t;
+  }
+  // Glitch blocks (G and g) flicker on and off, taking turns
+  function glitchOn(t) {
+    const g = L.glitch, per = g.on + g.off;
+    return ((L.time + (t === 4 ? per / 2 : 0)) % per) < g.on;
+  }
+  function playerInCell(tx, ty) {
+    const p = L.player;
+    return p.x < (tx + 1) * T && p.x + p.w > tx * T && p.y < (ty + 1) * T && p.y + p.h > ty * T;
+  }
   const solid = (tx, ty) => tileAt(tx, ty) === 1;
   const ladder = (tx, ty) => tileAt(tx, ty) === 2;
   const ladderTop = (tx, ty) => ladder(tx, ty) && !ladder(tx, ty - 1);
@@ -387,19 +408,25 @@
         o.t += dt * speedUp;
         o.angle = o.base + (o.sweep ? o.sweep * Math.sin((2 * Math.PI * o.t) / o.period + o.phase) : 0);
       } else if (o.kind === 'guard') {
-        const lure = (L.decoys || []).find((d) => d.landed && d.t > 0 && Math.abs(d.feet - o.feet) < 6 && Math.abs(d.x - o.x) < 9 * T);
+        const lure = pickLure(o);
         if (lure) {
-          // a decoy on this floor: walk over to it and stare at it until it stops
+          // a decoy or a ringing noisemaker on this floor: walk over and check it out
           o.lured = true;
           const dx = lure.x - o.x;
-          if (Math.abs(dx) > 18) { o.dir = Math.sign(dx); o.x += o.dir * o.speed * 1.2 * dt; o.step += o.speed * dt * 0.07; o.wait = 0; }
-          else { o.dir = Math.sign(dx) || o.dir; o.wait = 0.01; }
+          if (Math.abs(dx) > 22) { o.dir = Math.sign(dx); o.x += o.dir * o.speed * 1.25 * dt; o.step += o.speed * dt * 0.07; o.wait = 0; }
+          else {
+            o.dir = Math.sign(dx) || o.dir; o.wait = 0.01;
+            if (lure.decoy) {
+              lure.decoy.inspect += dt;
+              if (lure.decoy.inspect > DECOY_INSPECT) { lure.decoy.busted = 0.01; if (mode === 'play') showToast('A guard knocked your decoy over'); }
+            }
+          }
         } else if (o.lured || o.x < o.from - 1 || o.x > o.to + 1) {
           // decoy finished: walk back to the patrol route
           const target = clamp(o.x, o.from, o.to);
           const dx = target - o.x;
           if (Math.abs(dx) > 2) { o.dir = Math.sign(dx); o.x += o.dir * o.speed * dt; o.step += o.speed * dt * 0.06; o.wait = 0; }
-          else { o.lured = false; o.wait = 0; }
+          else { o.x = target; o.lured = false; o.wait = 0; }
         } else if (o.wait > 0) {
           o.wait -= dt;
           if (o.wait <= 0) o.dir *= -1;
@@ -560,29 +587,46 @@
     }
   }
 
-  // Decoys: a ticking noisemaker. Guards on the same floor walk over to it and stare at it.
-  function throwDecoy() {
-    if (save.decoys <= 0) { showToast('No decoys · buy them at the Safehouse'); return; }
+  // Gadgets
+  // Decoy (Q): a lookalike of the thief, set up where you stand. Guards on that floor walk over to check it,
+  // and knock it over after a few seconds of staring at it.
+  // Noisemaker (F): press F to drop it, walk away, press F again to set it off. Guards on that floor investigate.
+  function placeDecoy() {
     const p = L.player;
-    const sx = p.x + p.w / 2, sy = p.y + p.h - 6;
-    let x = sx;
-    for (let k = 0; k < 24; k++) {           // fly forward up to 3 tiles, stop at walls
-      const nx = x + p.facing * 4;
-      if (solid(Math.floor(nx / T), Math.floor(sy / T)) || solid(Math.floor(nx / T), Math.floor((sy - 20) / T))) break;
-      x = nx;
-    }
-    let row = Math.floor(sy / T);
-    while (row < ROWS - 1 && !solid(Math.floor(x / T), row + 1) && !ladderTop(Math.floor(x / T), row + 1)) row++;
+    if (save.decoys <= 0) { showToast('No decoys · buy them at the Safehouse'); return; }
+    if (!p.onGround || p.climbing) { showToast('Stand on the floor to set up a decoy'); return; }
     save.decoys--; persist();
-    L.decoys.push({ x, feet: (row + 1) * T, fromX: sx, fromY: p.y + 20, t: DECOY_LIFE, fly: 0, landed: false });
-    showToast(`Decoy thrown · ${save.decoys} left`);
+    L.decoys.push({ x: p.x + p.w / 2, feet: p.y + p.h, facing: p.facing, t: DECOY_LIFE, inspect: 0, busted: 0 });
+    showToast(`Decoy set up · ${save.decoys} left`);
   }
-  function updateDecoys(dt) {
-    for (const d of L.decoys) {
-      if (!d.landed) { d.fly += dt / 0.45; if (d.fly >= 1) { d.fly = 1; d.landed = true; } }
-      else d.t -= dt;
+  function noiseKey() {
+    const p = L.player;
+    const armed = L.noises.find((n) => !n.ringing && !n.done);
+    if (armed) { armed.ringing = NOISE_RING; showToast('Noisemaker going off!'); return; }
+    if (save.noise <= 0) { showToast('No noisemakers · buy them at the Safehouse'); return; }
+    if (!p.onGround || p.climbing) { showToast('Stand on the floor to drop a noisemaker'); return; }
+    save.noise--; persist();
+    L.noises.push({ x: p.x + p.w / 2, feet: p.y + p.h, ringing: 0, done: false });
+    showToast('Noisemaker dropped · walk away, then press F to set it off');
+  }
+  function updateGadgets(dt) {
+    for (const d of L.decoys) { if (d.busted > 0) d.busted += dt; else if ((d.t -= dt) <= 0) d.busted = 0.01; }
+    L.decoys = L.decoys.filter((d) => d.busted < 1.5);
+    for (const n of L.noises) if (n.ringing > 0 && (n.ringing -= dt) <= 0) { n.ringing = 0; n.done = true; }
+    L.noises = L.noises.filter((n) => !n.done);
+  }
+  // What a guard would go and look at: a ringing noisemaker beats a decoy; must be on his floor and close enough
+  function pickLure(o) {
+    let best = null, bestD = Infinity;
+    for (const n of L.noises || []) {
+      if (n.ringing > 0 && Math.abs(n.feet - o.feet) < 6) { const d = Math.abs(n.x - o.x); if (d < 14 * T && d < bestD) { best = { x: n.x }; bestD = d - 1000; } }
     }
-    L.decoys = L.decoys.filter((d) => !d.landed || d.t > -0.5);
+    for (const dc of L.decoys || []) {
+      if (dc.busted > 0 || Math.abs(dc.feet - o.feet) >= 6) continue;
+      const d = Math.abs(dc.x - o.x);
+      if (d < 10 * T && d < bestD) { best = { x: dc.x, decoy: dc }; bestD = d; }
+    }
+    return best;
   }
 
   function showToast(text) { L.toast = { text, t: 2.4 }; }
@@ -604,8 +648,17 @@
     if (mode !== 'play') { updateObjects(dt); return; }
     if (Input.hit('restart')) { startLevel(L.index); return; }
     if (Input.hit('pause')) { pause(); return; }
-    if (Input.hit('decoy')) throwDecoy();
-    updateDecoys(dt);
+    // glitch blocks the player is already standing in stay open until they step out
+    L.inside = new Set();
+    { const p = L.player;
+      for (let ty = Math.floor(p.y / T); ty <= Math.floor((p.y + p.h - 0.01) / T); ty++)
+        for (let tx = Math.floor(p.x / T); tx <= Math.floor((p.x + p.w - 0.01) / T); tx++) {
+          const g = L.grid[ty] && L.grid[ty][tx];
+          if ((g === 3 || g === 4) && playerInCell(tx, ty)) L.inside.add(ty * COLS + tx);
+        } }
+    if (Input.hit('decoy')) placeDecoy();
+    if (Input.hit('noise')) noiseKey();
+    updateGadgets(dt);
 
     updatePlayer(dt);
     updateObjects(dt);
@@ -665,7 +718,8 @@
 
     // haul so far and decoys, in a chip under the level name
     const haul = L.loot.filter((i) => i.got).reduce((n, i) => n + i.value, 0);
-    const chip = `HAUL ${fmtMoney(haul)}   DECOYS ${save.decoys} [Q]`;
+    const armed = L.noises.some((n) => !n.ringing);
+    const chip = `HAUL ${fmtMoney(haul)}   DECOYS ${save.decoys} [Q]   ${armed ? 'NOISEMAKER ARMED · F TO SET OFF' : `NOISE ${save.noise} [F]`}`;
     ctx.font = `600 10px ${FONT_MONO}`; ctx.textAlign = 'left';
     const cw = ctx.measureText(chip).width + 16;
     ctx.fillStyle = 'rgba(6,6,12,0.7)'; ctx.fillRect(8, 30, cw, 18);
@@ -781,6 +835,10 @@
     $('won-bank').textContent = fmtMoney(save.bank);
     $('won-time').textContent = fmtTime(L.time);
     $('won-next').hidden = L.index >= LEVELS.length - 1;
+    if (L.def.final) {
+      $('won-title').textContent = 'You stole the game';
+      $('won-haul').textContent = 'Night Shift is yours. Thanks for playing. · GooseKnightGaming';
+    }
     burst(L.player.x + 10, L.player.y, '#4be08f', 20);
     setTimeout(() => { if (mode === 'won') show('won'); }, 300);
   }
@@ -870,11 +928,17 @@
       });
     });
     const full = save.decoys >= DECOY_MAX;
-    card('Decoy', 'A ticking noisemaker. Press Q to throw it. Guards on that floor walk over and stare at it for a few seconds.',
+    card('Decoy', 'A stand-in dressed exactly like you. Press Q to set it up where you stand. Guards on that floor walk over to check it, then knock it over.',
       `Carrying ${save.decoys} of ${DECOY_MAX}`, '', full ? null : DECOY_PRICE, !full && save.bank >= DECOY_PRICE, () => {
         if (full || save.bank < DECOY_PRICE) return;
         save.bank -= DECOY_PRICE; save.decoys++;
       }, full ? 'Pockets full' : null);
+    const nfull = save.noise >= NOISE_MAX;
+    card('Noisemaker', 'Press F to drop it, get clear, then press F again to set it off. Guards on that floor go to investigate for six seconds.',
+      `Carrying ${save.noise} of ${NOISE_MAX}`, '', nfull ? null : NOISE_PRICE, !nfull && save.bank >= NOISE_PRICE, () => {
+        if (nfull || save.bank < NOISE_PRICE) return;
+        save.bank -= NOISE_PRICE; save.noise++;
+      }, nfull ? 'Pockets full' : null);
   }
 
   function onMenuKey(e) {

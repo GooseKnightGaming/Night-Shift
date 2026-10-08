@@ -25,6 +25,7 @@ window.NightShiftRender = (() => {
     { wall: 0x34473f, wall2: 0x3c5249, trim: 0x9aa782, floor: 0x5a4632, mass: 0x111a17, section: 0x18231f, lamp: 0xfff0cc, sky: 0x2c4a44 }, // museum
     { wall: 0x313c55, wall2: 0x38445f, trim: 0x8aa0c0, floor: 0x4a505e, mass: 0x10141e, section: 0x181e2b, lamp: 0xe8f1ff, sky: 0x2e3b5c }, // bank
     { wall: 0x253b42, wall2: 0x2c464e, trim: 0x67b3b0, floor: 0x37454a, mass: 0x0b1618, section: 0x132327, lamp: 0xd9fff8, sky: 0x214a50 }, // tower
+    { wall: 0x10141f, wall2: 0x141a28, trim: 0x39ffb0, floor: 0x1a2030, mass: 0x05070c, section: 0x0a0f18, lamp: 0x7dffd0, sky: 0x1a3a40, grid: true }, // the machine
   ];
 
   let renderer, scene, camera, keyLight, hemi;
@@ -176,6 +177,15 @@ window.NightShiftRender = (() => {
       for (let x = 0; x < w; x += 32) g.fillRect(x, 0, 14, w);
       g.fillStyle = 'rgba(255,255,255,0.035)';
       for (let y = 8; y < w; y += 32) for (let x = 7; x < w; x += 32) { g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.fill(); }
+      if (st.grid) { // the machine: a circuit-board grid instead of wallpaper
+        g.fillStyle = hex(st.wall); g.fillRect(0, 0, w, w);
+        g.strokeStyle = 'rgba(57,255,176,0.18)'; g.lineWidth = 1;
+        for (let k = 0; k <= w; k += 32) { g.beginPath(); g.moveTo(k + 0.5, 0); g.lineTo(k + 0.5, w); g.moveTo(0, k + 0.5); g.lineTo(w, k + 0.5); g.stroke(); }
+        g.fillStyle = 'rgba(57,255,176,0.35)';
+        for (let k = 0; k < 14; k++) g.fillRect(Math.floor(rand() * 8) * 32 + 14, Math.floor(rand() * 8) * 32 + 14, 4, 4);
+        g.fillStyle = 'rgba(57,255,176,0.12)'; g.font = '10px monospace';
+        for (let k = 0; k < 6; k++) g.fillText(rand() > 0.5 ? '0x' + Math.floor(rand() * 65535).toString(16) : 'NS_' + Math.floor(rand() * 99), Math.floor(rand() * 7) * 32 + 4, Math.floor(rand() * 8) * 32 + 26);
+      }
     }, [COLS / 4, ROWS / 4]);
     const back = mesh(new THREE.PlaneGeometry(COLS, ROWS), std(0xffffff, { map: wallTex, r: 0.95 }), COLS / 2, ROWS / 2, ZB, world);
     back.castShadow = false;
@@ -226,6 +236,18 @@ window.NightShiftRender = (() => {
     const rung = new THREE.CylinderGeometry(0.025, 0.025, 0.6, 6); rung.rotateZ(Math.PI / 2);
     instanced(rung, steel, ladderCells.flatMap((c) => [[...c, 0.17], [...c, 0.5], [...c, 0.83]]),
       (m, [x, y, f]) => m.makeTranslation(x + 0.5, ROWS - y - f, -0.35));
+
+    // glitch blocks: two groups that take turns flickering in and out
+    B.glitch = [3, 4].map((kind) => {
+      const cells = [];
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (h.glitch && h.glitch(x, y) === kind) cells.push([x, y]);
+      if (!cells.length) return null;
+      const col = kind === 3 ? 0x39ffb0 : 0xff4fd8;
+      const mat = new THREE.MeshStandardMaterial({ color: 0x0c1a1a, emissive: col, emissiveIntensity: 0.7, roughness: 0.4, transparent: true, opacity: 0.85 });
+      const im = instanced(new THREE.BoxGeometry(0.96, 0.96, DEPTH - 0.3), mat, cells, (m, [x, y]) => m.makeTranslation(x + 0.5, ROWS - y - 0.5, 0));
+      im.castShadow = false;
+      return { im, mat, kind };
+    });
 
     // ceiling lamps with real light (a limited number so it stays fast)
     const lampSpots = [];
@@ -292,7 +314,7 @@ window.NightShiftRender = (() => {
     mesh(new THREE.BoxGeometry(0.5, 0.06, 0.04), std(0x9a9aa8, { r: 0.4, m: 0.6 }), 0, 0.95, 0.06, g);
     const signTex = canvasTex(128, 48, (c) => {
       c.fillStyle = '#ffffff'; c.fillRect(0, 0, 128, 48);
-      c.fillStyle = '#000'; c.font = 'bold 30px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EXIT', 64, 26);
+      c.fillStyle = '#000'; c.font = 'bold 30px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(L.def.final ? 'QUIT' : 'EXIT', 64, 26);
     });
     const signMat = new THREE.MeshBasicMaterial({ map: signTex, color: 0xff4040, toneMapped: false });
     mesh(new THREE.BoxGeometry(0.6, 0.22, 0.06), signMat, 0, 2.1, 0.03, g).castShadow = false;
@@ -322,6 +344,23 @@ window.NightShiftRender = (() => {
     const g = new THREE.Group();
     const x = it.x + 0.5, y = ROWS - it.y - 0.5;
     world.add(g);
+    if (it.kind === 'art' && it.variant === 'cartridge') {
+      // the final prize: the game cartridge itself, floating and glowing
+      g.position.set(x, y, 0);
+      const cart = new THREE.Group(); g.add(cart);
+      mesh(new THREE.BoxGeometry(0.62, 0.7, 0.12), std(0x3a3d48, { r: 0.45, m: 0.2 }), 0, 0, 0, cart);
+      mesh(new THREE.BoxGeometry(0.5, 0.12, 0.13), std(0x2a2c34, { r: 0.5 }), 0, -0.36, 0, cart);
+      const labelTex = canvasTex(128, 112, (c) => {
+        c.fillStyle = '#0b0c14'; c.fillRect(0, 0, 128, 112);
+        c.fillStyle = '#f2c46d'; c.font = 'bold 26px Impact, Arial Narrow, sans-serif'; c.textAlign = 'center';
+        c.fillText('NIGHT', 64, 46); c.fillText('SHIFT', 64, 76);
+        c.fillStyle = '#39ffb0'; c.font = '11px monospace'; c.fillText('GOOSEKNIGHT', 64, 98);
+      });
+      mesh(new THREE.PlaneGeometry(0.48, 0.42), new THREE.MeshBasicMaterial({ map: labelTex, toneMapped: false }), 0, 0.06, 0.065, cart).castShadow = false;
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x39ffb0, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5 }));
+      halo.scale.set(1.8, 1.8, 1); g.add(halo);
+      return { g, spin: cart, bob: true, halo, cartridge: true };
+    }
     if (it.kind === 'art') {
       g.position.set(x, y, ZB + 0.06);
       const gold = std(0xc9a14a, { r: 0.35, m: 0.75 });
@@ -698,23 +737,43 @@ window.NightShiftRender = (() => {
     ring.position.y = 0.1; g.add(ring);
     return { g, ledMat, ring, ringMat };
   }
-  function updateDecoys(L, t) {
-    if (!B.decoys) B.decoys = new Map();
+  function updateDecoys(L, t, dt) {
+    if (!B.decoys) { B.decoys = new Map(); B.noises = new Map(); }
+    // lookalike decoys: a copy of the thief, standing still; topples over when a guard busts it
     const live = new Set(L.decoys || []);
-    for (const [d, n] of B.decoys) if (!live.has(d)) { world.remove(n.g); B.decoys.delete(d); }
+    for (const [d, n] of B.decoys) if (!live.has(d)) { world.remove(n.root); B.decoys.delete(d); }
     for (const d of L.decoys || []) {
       let n = B.decoys.get(d);
-      if (!n) { n = buildDecoy(); B.decoys.set(d, n); }
-      const f = d.fly;
-      const x = wx(d.fromX + (d.x - d.fromX) * f);
-      const y0 = wy(d.fromY), y1 = wy(d.feet);
-      const y = y0 + (y1 - y0) * f + Math.sin(f * Math.PI) * 0.9;
-      n.g.position.set(x, y, 0.1);
-      n.g.rotation.z = d.landed ? 0 : f * 9;
-      const on = d.landed && d.t > 0;
+      if (!n) { n = makeHuman('thief'); world.add(n.root); n.faceAngle = d.facing * (Math.PI / 2 - 0.45); B.decoys.set(d, n); }
+      n.root.position.set(wx(d.x), wy(d.feet), 0.05);
+      pose(n, { phase: 0, speed: 0, facing: d.facing, dt });
+      n.root.rotation.z = d.busted > 0 ? -d.facing * Math.min(1, d.busted * 3) * (Math.PI / 2) : 0;
+    }
+    // noisemakers
+    const liveN = new Set(L.noises || []);
+    for (const [d, n] of B.noises) if (!liveN.has(d)) { world.remove(n.g); B.noises.delete(d); }
+    for (const d of L.noises || []) {
+      let n = B.noises.get(d);
+      if (!n) { n = buildDecoy(); B.noises.set(d, n); }
+      n.g.position.set(wx(d.x), wy(d.feet), 0.2);
+      const on = d.ringing > 0;
       n.ring.visible = on;
+      n.g.rotation.z = on ? Math.sin(t * 40) * 0.08 : 0;
       if (on) { const k = (t * 1.6) % 1; n.ring.scale.setScalar(0.5 + k * 3); n.ringMat.opacity = 0.6 * (1 - k); }
-      n.ledMat.color.setHex(on && Math.sin(t * 12) > 0 ? 0xff4040 : 0x501010);
+      n.ledMat.color.setHex(on ? (Math.sin(t * 20) > 0 ? 0xff4040 : 0xffd479) : (Math.sin(t * 3) > 0.6 ? 0x40ff8a : 0x0a3a1a));
+    }
+  }
+
+  function updateGlitch(L, t) {
+    if (!B.glitch) return;
+    const per = L.glitch.on + L.glitch.off;
+    for (const gl of B.glitch) {
+      if (!gl) continue;
+      const ph = (L.time + (gl.kind === 4 ? per / 2 : 0)) % per;
+      const on = ph < L.glitch.on;
+      const warn = !on && ph > per - 0.35;     // about to appear: flicker
+      gl.mat.opacity = on ? 0.88 : warn ? (Math.sin(t * 60) > 0 ? 0.5 : 0.08) : 0.08;
+      gl.mat.emissiveIntensity = on ? 0.7 + Math.sin(t * 23) * 0.15 : 0.25;
     }
   }
 
@@ -773,7 +832,7 @@ window.NightShiftRender = (() => {
       node.g.visible = !it.got;
       if (node.ghost) node.ghost.visible = it.got;
       if (it.got) continue;
-      if (node.spin) node.spin.rotation.y = t * (it.kind === 'gem' ? 1.6 : 0.6);
+      if (node.spin) node.spin.rotation.y = node.cartridge ? Math.sin(t * 1.2) * 0.6 : t * (it.kind === 'gem' ? 1.6 : 0.6);
       if (node.bob) node.g.position.y = ROWS - it.y - 0.5 + Math.sin(t * 2.5 + it.x) * 0.06;
       if (node.halo) node.halo.material.opacity = 0.25 + 0.12 * Math.sin(t * 2 + it.x);
     }
@@ -781,7 +840,8 @@ window.NightShiftRender = (() => {
     const dc = open ? 0x40ff8a : 0xff4040;
     B.door.signMat.color.setHex(dc); B.door.glow.material.color.setHex(dc);
 
-    updateDecoys(L, t);
+    updateDecoys(L, t, dt);
+    updateGlitch(L, t);
     updateCones(ctx);
     updateParticles(L);
 
@@ -795,6 +855,8 @@ window.NightShiftRender = (() => {
     camTarget.y += (ty - camTarget.y) * follow;
     let sx = 0, sy = 0;
     if (L.shake > 0) { sx = (Math.random() - 0.5) * 0.25; sy = (Math.random() - 0.5) * 0.25; }
+    if (L.act === 4 && !menu && Math.sin(t * 0.7) > 0.985) { sx += (Math.random() - 0.5) * 0.5; scene.background.setHex(Math.random() > 0.5 ? 0x0a1a14 : 0x050508); }
+    else if (scene.background.getHex() !== 0x050508) scene.background.setHex(0x050508);
     camera.position.set(camTarget.x + sx, camTarget.y + 1.6 + sy, fitDist * 1.035);
     camera.lookAt(camTarget.x + sx, camTarget.y + sy, 0);
     if (api.debugCam) { const d = api.debugCam; camera.position.set(d.x, d.y + 0.6, d.dist); camera.lookAt(d.x, d.y, 0); }
