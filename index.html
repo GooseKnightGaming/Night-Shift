@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Night Shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="stage">
+  <canvas id="game" tabindex="0" aria-label="Night Shift game"></canvas>
+
+  <section class="screen title dim" id="screen-title">
+    <div class="card">
+      <div class="eyebrow">GooseKnightGaming presents</div>
+      <h1>NIGHT<br><span>SHIFT</span></h1>
+      <p class="tagline">Get in. Take the painting. Get out without being seen.</p>
+      <div class="actions">
+        <button type="button" class="primary" id="btn-play">Start the job</button>
+        <button type="button" id="btn-levels">Choose level</button>
+      </div>
+      <dl class="keys">
+        <dt>A D</dt><dd>Move</dd>
+        <dt>W / Space</dt><dd>Jump · W and S climb ladders</dd>
+        <dt>S</dt><dd>Duck and crawl</dd>
+        <dt>E</dt><dd>Hack a panel (hold)</dd>
+        <dt>R · Esc</dt><dd>Restart · pause</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="screen select dim" id="screen-select" hidden>
+    <div class="card">
+      <div class="select-head">
+        <h2>Jobs</h2>
+        <button type="button" id="btn-select-back">Back</button>
+      </div>
+      <div id="acts"></div>
+    </div>
+  </section>
+
+  <section class="screen result dim" id="screen-pause" hidden>
+    <div class="card">
+      <h2>Paused</h2>
+      <p>The guards are still walking their rounds.</p>
+      <div class="actions">
+        <button type="button" class="primary" id="btn-resume">Resume</button>
+        <button type="button" id="btn-restart">Restart</button>
+        <button type="button" id="btn-pause-levels">Levels</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen result dim" id="screen-caught" hidden>
+    <div class="card">
+      <h2>Caught</h2>
+      <p id="caught-reason">A camera caught you on tape.</p>
+      <div class="actions">
+        <button type="button" class="primary" id="btn-retry">Try again (R)</button>
+        <button type="button" id="btn-caught-levels">Levels</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen result dim" id="screen-won" hidden>
+    <div class="card">
+      <h2 id="won-title">Clean getaway</h2>
+      <ul class="stars-list" id="won-stars"></ul>
+      <p class="haul" id="won-haul"></p>
+      <div class="meta"><span>Time <b id="won-time">0:00.0</b></span></div>
+      <div class="actions">
+        <button type="button" class="primary" id="won-next">Next job</button>
+        <button type="button" id="btn-won-retry">Replay</button>
+        <button type="button" id="btn-won-levels">Levels</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<p class="footer">
+  <span class="touch-note">Night Shift is played with a keyboard.</span>
+  <kbd>A</kbd> <kbd>D</kbd> move · <kbd>W</kbd>/<kbd>Space</kbd> jump · <kbd>S</kbd> duck · <kbd>E</kbd> hack · <kbd>R</kbd> restart · <kbd>Esc</kbd> pause
+</p>
+
+<script src="levels.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
