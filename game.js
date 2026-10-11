@@ -19,7 +19,7 @@
   'use strict';
 
   // ───────────────────────── 1. Constants and setup ─────────────────────────
-  const VERSION = 'V4';
+  const VERSION = 'V5';
   const T = 32, COLS = 30, ROWS = 17;
   const W = COLS * T, H = ROWS * T;
   const LEVELS = window.NIGHT_SHIFT_LEVELS || [];

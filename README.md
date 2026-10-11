@@ -2,7 +2,7 @@
 
 A 2.5D stealth platformer by GooseKnightGaming. Get in, take the painting, get out without being seen.
 
-Current version: **V4**. You move side-on (2D rules), but the picture is 3D, drawn with Three.js (loaded from a CDN). No build step.
+Current version: **V5**. You move side-on (2D rules), but the picture is 3D, drawn with Three.js (loaded from a CDN). No build step.
 
 ## Play locally
 Open `index.html` in a browser. To unlock every level for testing, open `index.html#all`.
@@ -21,6 +21,8 @@ Open `index.html` in a browser. To unlock every level for testing, open `index.h
 | E | Hack a panel (hold) · leave through the exit door |
 | Q | Set up a decoy (a lookalike of you) |
 | F | Drop a noisemaker · F again sets it off |
+| Tab (hold) | See the whole building |
+| M | Sound on / off |
 | R | Restart level |
 | Esc / P | Pause |
 
@@ -55,6 +57,15 @@ Spend the bank at the Safehouse: Quick Fingers (faster hacking), Loop Extender (
 Act 5 adds **glitch blocks** (`G` and `g` in the maps): they take turns flickering in and out, block movement and cameras while they're there, and never appear inside you.
 
 ## Changelog
+**V5: the look-and-feel pass**
+- The game fills the window (it was boxed in, with black all round).
+- A camera that follows the thief from closer in, looking ahead the way you face. Each level opens on the whole building, framed to its real size, then moves in; hold **Tab** to see the whole building again whenever you want to plan.
+- Light that reads: every ceiling lamp throws a soft cone of light down the wall and a pool on the floor; the rooms are darker between the lamps; the thief carries a faint cool light so he reads against the dark (it does not change how guards see you).
+- Rooms that look like rooms: panelling below the dado rail, and windows onto a night city (towers, lit windows, a moon), placed clear of loot, panels, ladders, the exit and the curtains.
+- A vignette and a little film grain over the picture.
+- Sound, for the first time (all generated in the browser, no files): footsteps (softer when ducking), jumps and landings, ladder rungs, pickups (coins, a chord for a painting, a sparkle for the gem), hacking beeps, camera loops, the laser tripwire, a sting when you are spotted, alert and lockdown alarms, the all-clear, decoys and noisemakers, getting caught, and slipping out. Under it all, the building at night: a low hum, distant traffic, and a slow pulse that quickens as the heat rises. **M** turns sound on and off.
+- The game's rules and levels are unchanged (every level is still finishable without being seen).
+
 **V4**
 - Decoys now look like you and are set up where you stand; guards walk over, inspect, and knock them over.
 - New Noisemaker: drop it, walk away, set it off remotely with F.

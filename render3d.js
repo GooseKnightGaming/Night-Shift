@@ -17,6 +17,8 @@ window.NightShiftRender = (() => {
   const T = 32, COLS = 30, ROWS = 17;
   const HUD_W = 960, HUD_H = 544;
   const DEPTH = 3, ZB = -DEPTH / 2;
+  const VIEW_TILES = 17;      // (V5) how many tiles wide the follow camera shows
+  const INTRO = 1.6;          // (V5) seconds of the whole building at the start of a level (game time), then in to the thief
   const wx = (px) => px / T;
   const wy = (py) => ROWS - py / T;
 
@@ -65,12 +67,21 @@ window.NightShiftRender = (() => {
   const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
   // ───────────── shared textures ─────────────
-  let glowTex, stripeTex;
+  let glowTex, stripeTex, lightConeTex;
   function makeShared() {
     glowTex = canvasTex(64, 64, (g, w) => {
       const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
       gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = gr; g.fillRect(0, 0, w, w);
+    });
+    lightConeTex = canvasTex(128, 256, (g, w, hh) => {
+      // a cone of light from the top centre, fading down and out
+      for (let y = 0; y < hh; y++) {
+        const t = y / hh, half = 6 + t * (w / 2 - 6), a = 0.55 * (1 - t * 0.75);
+        const gr = g.createLinearGradient(w / 2 - half, 0, w / 2 + half, 0);
+        gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, `rgba(255,255,255,${a})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr; g.fillRect(w / 2 - half, y, half * 2, 1);
+      }
     });
     stripeTex = canvasTex(64, 64, (g) => {
       g.fillStyle = '#26262f'; g.fillRect(0, 0, 64, 64);
@@ -87,15 +98,15 @@ window.NightShiftRender = (() => {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.3;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x050508);
     camera = new THREE.PerspectiveCamera(24, aspect, 0.5, 400);
 
-    hemi = new THREE.HemisphereLight(0x9aa6d8, 0x1c1418, 0.55);
+    hemi = new THREE.HemisphereLight(0x9aa6d8, 0x1c1418, 0.38);   // (V5) darker between the lamps: the light pools carry the room
     scene.add(hemi);
-    keyLight = new THREE.DirectionalLight(0xfff2e0, 0.55);
+    keyLight = new THREE.DirectionalLight(0xc8d4ff, 0.42);
     keyLight.position.set(COLS / 2 - 8, ROWS + 12, 22);
     keyLight.target.position.set(COLS / 2, ROWS / 2, 0);
     keyLight.castShadow = true;
@@ -131,7 +142,7 @@ window.NightShiftRender = (() => {
     if (!world) return;
     world.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
-      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map && m.map !== stripeTex && m.map !== glowTex) m.map.dispose(); m.dispose(); });
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map && m.map !== stripeTex && m.map !== glowTex && m.map !== lightConeTex) m.map.dispose(); m.dispose(); });
     });
     scene.remove(world);
     world = null;
@@ -163,10 +174,19 @@ window.NightShiftRender = (() => {
     L.objects.forEach((o) => ensureObject(o));
     B.player = makeHuman('thief');
     world.add(B.player.root);
+    // (V5) a faint cool light that travels with the thief: he reads against the dark without lighting the room
+    B.playerLight = new THREE.PointLight(0x9fb8ff, 0.55, 3.2, 2);
+    B.playerLight.castShadow = false;
+    world.add(B.playerLight);
     buildParticles();
 
+    // (V5) the building's own extent: every open cell, and a tile of wall round it
+    let x0 = COLS, x1 = 0, y0 = ROWS, y1 = 0;
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (!h.solid(x, y)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x + 1); y0 = Math.min(y0, y); y1 = Math.max(y1, y + 1); }
+    if (x0 >= x1) { x0 = 0; x1 = COLS; y0 = 0; y1 = ROWS; }
+    B.bounds = { x0: Math.max(0, x0 - 0.6), x1: Math.min(COLS, x1 + 0.6), top: ROWS - Math.max(0, y0 - 0.6), bottom: ROWS - Math.min(ROWS, y1 + 0.6) };
     // snap the camera straight to the new level
-    camTarget.set(COLS / 2, ROWS / 2, 0);
+    camTarget.set((B.bounds.x0 + B.bounds.x1) / 2, (B.bounds.top + B.bounds.bottom) / 2, 0);
   }
 
   function buildBuilding(L, h, st) {
@@ -273,11 +293,68 @@ window.NightShiftRender = (() => {
       cone.material.side = THREE.DoubleSide;
       mesh(new THREE.SphereGeometry(0.07, 10, 8), bulb, 0, -0.36, 0, g).castShadow = false;
       if (i < 9) {
-        const pl = new THREE.PointLight(st.lamp, 0.9, 7.5, 2);
+        const pl = new THREE.PointLight(st.lamp, 1.35, 8, 2);
         pl.position.set(0, -0.5, 0.4);
         g.add(pl);
       }
       world.add(g);
+      // (V5) the light it throws: a soft cone down the wall and a pool on the floor
+      let fr = y; while (fr < ROWS && !h.solid(Math.floor(x), fr)) fr++;
+      const drop = fr - y;
+      if (drop > 0) {
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(3.4, drop + 0.2), new THREE.MeshBasicMaterial({ map: lightConeTex, color: st.lamp, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+        pool.position.set(x, ROWS - y - drop / 2 + 0.1, ZB + 0.025); pool.renderOrder = 1; world.add(pool);
+        const floorGlow = new THREE.Mesh(new THREE.PlaneGeometry(3.0, DEPTH * 0.9), new THREE.MeshBasicMaterial({ map: glowTex, color: st.lamp, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+        floorGlow.rotation.x = -Math.PI / 2; floorGlow.position.set(x, ROWS - fr + 0.085, 0); world.add(floorGlow);
+      }
+    });
+
+    // (V5) the rooms: panelling below the dado rail, and night windows onto the city
+    const wainTex = canvasTex(128, 64, (g, w, hh) => {
+      const base = new THREE.Color(st.trim).multiplyScalar(0.28);
+      g.fillStyle = '#' + base.getHexString(); g.fillRect(0, 0, w, hh);
+      g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 3; g.strokeRect(10, 10, w - 20, hh - 20);
+      g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2; g.strokeRect(13, 13, w - 26, hh - 26);
+    });
+    instanced(new THREE.PlaneGeometry(1, 0.84), std(0xffffff, { map: wainTex, r: 0.7 }), floorCells,
+      (m, [x, y]) => m.makeTranslation(x + 0.5, ROWS - y + 0.62, ZB + 0.012));
+    const busy = (x, r) => (L.loot || []).some((it) => Math.abs(it.x - x) <= 1 && it.y >= r - 2 && it.y <= r) ||
+      (L.objects || []).some((o) => o.kind === 'panel' && Math.abs(o.x / T - x) <= 1.5 && Math.abs(o.y / T - r) <= 2) ||
+      Math.abs(L.exit.x - x) <= 1 && Math.abs(L.exit.y - r) <= 2 ||
+      (L.shadows || []).some((sh) => x + 1 > sh.x / T - 0.5 && x < (sh.x + sh.w) / T + 0.5 && r + 1 > sh.y / T && r - 2 < (sh.y + sh.h) / T) ||
+      [x - 1, x, x + 1].some((cx) => h.ladder(cx, r) || h.ladder(cx, r - 1));
+    const winTex = cityTex(st);
+    const frameMat = std(0x1c1a22, { r: 0.6, m: 0.3 });
+    for (let r = 2; r < ROWS - 1; r++) {
+      let run = 0;
+      for (let x = 0; x < COLS; x++) {
+        const open = !h.solid(x, r) && !h.solid(x, r - 1) && h.solid(x, r + 1);
+        run = open ? run + 1 : 0;
+        if (run >= 3 && (x % 7 === 3) && !busy(x, r)) {
+          const wx0 = x - 0.5, wy0 = ROWS - (r + 1) + 1.0;
+          const glass = mesh(new THREE.PlaneGeometry(1.15, 0.85), new THREE.MeshBasicMaterial({ map: winTex, toneMapped: false }), wx0, wy0 + 0.42, ZB + 0.02, world);
+          glass.castShadow = false;
+          for (const [dx, dy, ww, hh2] of [[0, 0.44, 1.27, 0.07], [0, -0.44, 1.27, 0.07], [-0.6, 0, 0.07, 0.95], [0.6, 0, 0.07, 0.95], [0, 0, 0.04, 0.85]]) mesh(new THREE.BoxGeometry(ww, hh2, 0.06), frameMat, wx0 + dx, wy0 + 0.42 + dy, ZB + 0.04, world).castShadow = false;
+          mesh(new THREE.BoxGeometry(1.35, 0.05, 0.14), frameMat, wx0, wy0 - 0.06, ZB + 0.07, world);
+          const spill = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.8), new THREE.MeshBasicMaterial({ map: glowTex, color: 0x5a7ab8, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+          spill.position.set(wx0, wy0 + 0.42, ZB + 0.03); world.add(spill);
+        }
+      }
+    }
+  }
+
+  // (V5) a night city through the window: towers with a few lit windows, a moon
+  function cityTex(st) {
+    return canvasTex(128, 96, (g, w, hh) => {
+      const sky = g.createLinearGradient(0, 0, 0, hh);
+      sky.addColorStop(0, '#0b1230'); sky.addColorStop(1, '#2a2f5a');
+      g.fillStyle = sky; g.fillRect(0, 0, w, hh);
+      g.fillStyle = 'rgba(230,236,255,0.9)'; g.beginPath(); g.arc(18 + rand() * 90, 16, 6, 0, Math.PI * 2); g.fill();
+      for (let k = 0; k < 9; k++) {
+        const bx = rand() * w, bw = 10 + rand() * 18, bh = 25 + rand() * 55;
+        g.fillStyle = `rgb(${12 + k},${14 + k},${28 + k * 2})`; g.fillRect(bx, hh - bh, bw, bh);
+        for (let yy = hh - bh + 4; yy < hh - 3; yy += 6) for (let xx = bx + 2; xx < bx + bw - 2; xx += 5) if (rand() < 0.28) { g.fillStyle = rand() < 0.8 ? '#ffd88a' : '#9fe0ff'; g.fillRect(xx, yy, 2, 3); }
+      }
     });
   }
 
@@ -845,25 +922,51 @@ window.NightShiftRender = (() => {
     updateCones(ctx);
     updateParticles(L);
 
-    // camera: frames the whole building, leans gently toward the player
-    const cx = COLS / 2, cy = ROWS / 2;
+    // (V5) camera: in play it follows the thief from closer in, looking ahead the way he faces;
+    // each level opens on the whole building (the plan), and holding Tab shows it again
+    const bd = B.bounds, bw = bd.x1 - bd.x0, bh = bd.top - bd.bottom;
+    const cx = (bd.x0 + bd.x1) / 2, cy = (bd.top + bd.bottom) / 2;
+    const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    // the plan: this building, as large as the screen allows (menus keep the old wide view)
+    const planDist = menu ? fitDist : Math.max(bh / (2 * half), bw / (2 * half * aspect)) * 1.02;
+    const closeDist = Math.min(planDist, VIEW_TILES / (2 * half * aspect));
+    const wantPlan = menu || api.plan || ctx.mode === 'won' || L.time < INTRO;
+    B.zoom = B.zoom ?? 1;
+    B.zoom += ((wantPlan ? 1 : 0) - B.zoom) * Math.min(1, dt * (wantPlan ? 4 : 2.2));
+    const dist = closeDist + (planDist - closeDist) * B.zoom;
+    const visW = 2 * half * aspect * dist, visH = 2 * half * dist;
+    B.look = B.look ?? 0;
+    B.look += ((p.climbing ? 0 : p.facing * 2.2) - B.look) * Math.min(1, dt * 1.6);
     let tx = cx, ty = cy;
-    if (!menu) { tx = cx + (wx(p.x) - cx) * 0.1; ty = cy + (wy(p.y) - cy) * 0.08; }
-    else { tx = cx + Math.sin(t * 0.15) * 0.6; }
-    const follow = Math.min(1, dt * 3);
+    if (!menu) {
+      tx = wx(p.x + p.w / 2) + B.look * (1 - B.zoom);
+      ty = wy(p.y + p.h / 2) + 0.8;
+      // keep the building filling the frame (no void past its ends), and the plan centred
+      const clampTo = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
+      tx = clampTo(tx, bd.x0 + visW / 2, bd.x1 - visW / 2);
+      ty = clampTo(ty, bd.bottom + visH / 2 - 0.3, bd.top - visH / 2 + 0.3);
+      tx = cx + (tx - cx) * (1 - B.zoom) + (tx - cx) * B.zoom * 0.1;
+      ty = cy + (ty - cy) * (1 - B.zoom) + (ty - cy) * B.zoom * 0.08;
+    } else { tx = COLS / 2 + Math.sin(t * 0.15) * 0.6; ty = ROWS / 2; }
+    const follow = Math.min(1, dt * (B.zoom > 0.5 ? 3 : 5));
     camTarget.x += (tx - camTarget.x) * follow;
     camTarget.y += (ty - camTarget.y) * follow;
     let sx = 0, sy = 0;
     if (L.shake > 0) { sx = (Math.random() - 0.5) * 0.25; sy = (Math.random() - 0.5) * 0.25; }
     if (L.act === 4 && !menu && Math.sin(t * 0.7) > 0.985) { sx += (Math.random() - 0.5) * 0.5; scene.background.setHex(Math.random() > 0.5 ? 0x0a1a14 : 0x050508); }
     else if (scene.background.getHex() !== 0x050508) scene.background.setHex(0x050508);
-    camera.position.set(camTarget.x + sx, camTarget.y + 1.6 + sy, fitDist * 1.035);
+    camera.position.set(camTarget.x + sx, camTarget.y + dist * 0.04 + sy, dist * 1.035);
     camera.lookAt(camTarget.x + sx, camTarget.y + sy, 0);
     if (api.debugCam) { const d = api.debugCam; camera.position.set(d.x, d.y + 0.6, d.dist); camera.lookAt(d.x, d.y, 0); }
+    if (B.playerLight) { B.playerLight.position.set(wx(p.x + p.w / 2) + p.facing * 0.3, wy(p.y + p.h / 2) + 0.5, 1.2); B.playerLight.visible = !menu; }
 
     renderer.render(scene, camera);
   }
 
-  const api = { init, build, frame, project, debugCam: null };
+  const api = { init, build, frame, project, debugCam: null, plan: false };
+  // (V5) hold Tab to see the whole building
+  addEventListener('keydown', (e) => { if (e.code === 'Tab' && window.NightShift && window.NightShift.state.mode === 'play') { e.preventDefault(); api.plan = true; } });
+  addEventListener('keyup', (e) => { if (e.code === 'Tab') api.plan = false; });
+  addEventListener('blur', () => { api.plan = false; });
   return api;
 })();
