@@ -323,7 +323,7 @@ window.NightShiftRender = (() => {
       Math.abs(L.exit.x - x) <= 1 && Math.abs(L.exit.y - r) <= 2 ||
       (L.shadows || []).some((sh) => x + 1 > sh.x / T - 0.5 && x < (sh.x + sh.w) / T + 0.5 && r + 1 > sh.y / T && r - 2 < (sh.y + sh.h) / T) ||
       [x - 1, x, x + 1].some((cx) => h.ladder(cx, r) || h.ladder(cx, r - 1));
-    const winTex = cityTex(st);
+    const winTex = cityTex();
     const frameMat = std(0x1c1a22, { r: 0.6, m: 0.3 });
     for (let r = 2; r < ROWS - 1; r++) {
       let run = 0;
@@ -344,7 +344,7 @@ window.NightShiftRender = (() => {
   }
 
   // (V5) a night city through the window: towers with a few lit windows, a moon
-  function cityTex(st) {
+  function cityTex() {
     return canvasTex(128, 96, (g, w, hh) => {
       const sky = g.createLinearGradient(0, 0, 0, hh);
       sky.addColorStop(0, '#0b1230'); sky.addColorStop(1, '#2a2f5a');
@@ -382,10 +382,10 @@ window.NightShiftRender = (() => {
   function buildDoor(L) {
     const x = L.exit.x + 0.5, y = ROWS - L.exit.y - 1;
     const g = new THREE.Group(); g.position.set(x, y, ZB + 0.05); world.add(g);
-    const frame = std(0x4b4757, { r: 0.6, m: 0.3 });
-    mesh(new THREE.BoxGeometry(0.08, 1.85, 0.14), frame, -0.43, 0.92, 0, g);
-    mesh(new THREE.BoxGeometry(0.08, 1.85, 0.14), frame, 0.43, 0.92, 0, g);
-    mesh(new THREE.BoxGeometry(0.94, 0.08, 0.14), frame, 0, 1.86, 0, g);
+    const doorFrame = std(0x4b4757, { r: 0.6, m: 0.3 });
+    mesh(new THREE.BoxGeometry(0.08, 1.85, 0.14), doorFrame, -0.43, 0.92, 0, g);
+    mesh(new THREE.BoxGeometry(0.08, 1.85, 0.14), doorFrame, 0.43, 0.92, 0, g);
+    mesh(new THREE.BoxGeometry(0.94, 0.08, 0.14), doorFrame, 0, 1.86, 0, g);
     mesh(new THREE.BoxGeometry(0.78, 1.78, 0.05), std(0x2b2733, { r: 0.7, m: 0.2 }), 0, 0.89, 0.02, g);
     mesh(new THREE.BoxGeometry(0.05, 0.16, 0.06), std(0xd8d2c4, { r: 0.3, m: 0.8 }), 0.28, 0.9, 0.06, g);
     mesh(new THREE.BoxGeometry(0.5, 0.06, 0.04), std(0x9a9aa8, { r: 0.4, m: 0.6 }), 0, 0.95, 0.06, g);
@@ -466,7 +466,7 @@ window.NightShiftRender = (() => {
       return { g, spin: gem, bob: true };
     }
     // valuables sit on a display plinth when on the floor, otherwise on a wall shelf
-    let top = -0.2;
+    let top;
     if (onFloor) {
       mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), std(0xe8e4dc, { r: 0.35 }), 0, -0.29, 0, g);
       mesh(new THREE.BoxGeometry(0.48, 0.05, 0.48), std(0xd0cabe, { r: 0.4 }), 0, -0.06, 0, g);
@@ -696,7 +696,6 @@ window.NightShiftRender = (() => {
     hm.body.rotation.y = hm.faceAngle;
 
     const sw = Math.sin(s.phase) * s.speed;
-    const [aL, aR] = hm.arms, [lL, lR] = hm.legs;
     let hipY = 0.86, lean = 0.04 + s.speed * 0.08, headX = 0;
     let legA = [-sw * 0.75, sw * 0.75], kneeA = [Math.max(0, Math.sin(s.phase + 1.6)) * s.speed * 0.9, Math.max(0, Math.sin(s.phase + 1.6 + Math.PI)) * s.speed * 0.9];
     let armA = [sw * 0.7, -sw * 0.7], elbowA = [-0.25 - s.speed * 0.4, -0.25 - s.speed * 0.4], armZ = 0.08;

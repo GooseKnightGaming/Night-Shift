@@ -11,7 +11,7 @@
   'use strict';
   let ctx = null, out = null, sfx = null, bed = null, noiseBuf = null;
   let muted = false;
-  try { muted = localStorage.getItem('nightshift.muted') === '1'; } catch (e) { /* storage blocked */ }
+  try { muted = localStorage.getItem('nightshift.muted') === '1'; } catch { /* storage blocked */ }
 
   function init() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -97,7 +97,7 @@
 
   function setMuted(m) {
     muted = m;
-    try { localStorage.setItem('nightshift.muted', m ? '1' : '0'); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('nightshift.muted', m ? '1' : '0'); } catch { /* ignore */ }
     if (out) out.gain.setTargetAtTime(m ? 0 : 0.7, now(), 0.05);
   }
   addEventListener('keydown', (e) => {

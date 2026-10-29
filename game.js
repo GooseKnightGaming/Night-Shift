@@ -92,7 +92,7 @@
     held: new Set(), pressed: new Set(), released: new Set(), virtual: {},
     down(a) { return !!this.virtual[a] || BINDINGS[a].some((k) => this.held.has(k)); },
     hit(a) { return BINDINGS[a].some((k) => this.pressed.has(k)); },
-    let(a) { return BINDINGS[a].some((k) => this.released.has(k)); },
+    lifted(a) { return BINDINGS[a].some((k) => this.released.has(k)); },
     endStep() { this.pressed.clear(); this.released.clear(); },
   };
   addEventListener('keydown', (e) => {
@@ -110,7 +110,7 @@
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && typeof s === 'object') save = { ...save, ...s, upgrades: { ...(s.upgrades || {}) }, taken: s.taken || [] };
-  } catch (e) { /* storage unavailable: progress lasts for this visit only */ }
+  } catch { /* storage unavailable: progress lasts for this visit only */ }
   const tier = (id) => save.upgrades[id] || 0;
   const hackTime = () => [1.2, 0.8, 0.5][tier('hack')];
   const loopBonus = () => [0, 3, 6][tier('loop')];
@@ -118,7 +118,7 @@
   const coolRate = () => [7, 11, 14][tier('cool')];
   const heatGain = () => (tier('dark') ? 0.8 : 1);
   if (location.hash === '#all') save.unlocked = LEVELS.length;   // testing shortcut: add #all to the URL
-  function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
+  function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* ignore */ } }
 
   // ───────────────────────── 4. Level loading ─────────────────────────
   let L = null;        // the level being played (or shown behind a menu)
@@ -387,7 +387,7 @@
     if (p.jumpBuf > 0 && p.coyote > 0 && !p.ducking) {
       p.vy = -JUMP_V; p.coyote = 0; p.jumpBuf = 0; p.onGround = false;
     }
-    if (Input.let('jump') && p.vy < 0) p.vy *= 0.5;
+    if (Input.lifted('jump') && p.vy < 0) p.vy *= 0.5;
 
     p.vy = Math.min(p.vy + (p.vy > 0 ? FALL_GRAV : GRAV) * dt, MAX_FALL);
     p.onGround = false;
@@ -700,9 +700,9 @@
     if (L.heatMode) { ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(bx + bw * 0.33, 6, 1, 14); ctx.fillRect(bx + bw * 0.66, 6, 1, 14); }
     ctx.fillStyle = L.heat >= 66 ? '#ff4d43' : L.heat >= 33 ? '#ffae3d' : '#f2d46d';
     ctx.fillRect(bx, 8, (bw * L.heat) / 100, 10);
-    const tier = L.seenNow ? 'SPOTTED' : L.heat >= 66 ? 'LOCKDOWN' : L.heat >= 33 ? 'ALERT' : 'QUIET';
+    const alertLabel = L.seenNow ? 'SPOTTED' : L.heat >= 66 ? 'LOCKDOWN' : L.heat >= 33 ? 'ALERT' : 'QUIET';
     ctx.textAlign = 'left'; ctx.fillStyle = L.seenNow ? '#ff6b61' : '#9c96b3';
-    ctx.fillText(tier, bx + bw + 8, 13);
+    ctx.fillText(alertLabel, bx + bw + 8, 13);
 
     // loot counters + time (paintings ▣, valuables ●, gem ◆)
     const count = (k) => { const a = L.loot.filter((i) => i.kind === k); return [a.filter((i) => i.got).length, a.length]; };
@@ -902,7 +902,7 @@
     $('shop-bank').textContent = fmtMoney(save.bank);
     const root = $('shop-items');
     root.innerHTML = '';
-    const card = (title, desc, status, pips, price, can, onBuy, label) => {
+    const card = (title, desc, status, pips, price, can, onBuy, btnLabel) => {
       const el = document.createElement('article');
       el.className = 'shop-item';
       el.innerHTML = `<header><h3>${title}</h3><span class="pips">${pips}</span></header><p>${desc}</p><p class="status">${status}</p>`;
@@ -910,7 +910,7 @@
       b.type = 'button';
       b.className = can ? 'primary' : '';
       b.disabled = !can && price !== null;
-      b.textContent = label || (price === null ? 'Owned' : `Buy · ${fmtMoney(price)}`);
+      b.textContent = btnLabel || (price === null ? 'Owned' : `Buy · ${fmtMoney(price)}`);
       if (price === null) b.disabled = true;
       b.addEventListener('click', () => { onBuy(); persist(); buildShop(); });
       el.appendChild(b);
